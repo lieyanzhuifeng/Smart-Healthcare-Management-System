@@ -225,12 +225,28 @@ class Timeslot:
         )
 
 
+from dataclasses import dataclass
+from typing import ClassVar
+
+
 @dataclass
 class Appointment:
     patientsID: int
     sectionID: int
     state: int
     appointmentID: int
+
+    # 状态常量定义
+    STATE_ACTIVE: ClassVar[int] = 1  # 有效
+    STATE_COMPLETED: ClassVar[int] = 2  # 已完成
+    STATE_CANCELLED: ClassVar[int] = 3  # 已取消
+
+    # 状态映射到中文描述
+    STATE_DESCRIPTIONS: ClassVar[dict] = {
+        1: "有效",
+        2: "已完成",
+        3: "已取消"
+    }
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -240,6 +256,30 @@ class Appointment:
             state=data.get('state'),
             appointmentID=data.get('appointmentID')
         )
+
+    def get_state_description(self) -> str:
+        """获取状态的中文描述"""
+        return self.STATE_DESCRIPTIONS.get(self.state, "未知状态")
+
+    def is_active(self) -> bool:
+        """检查是否为有效状态"""
+        return self.state == self.STATE_ACTIVE
+
+    def is_completed(self) -> bool:
+        """检查是否为已完成状态"""
+        return self.state == self.STATE_COMPLETED
+
+    def is_cancelled(self) -> bool:
+        """检查是否为已取消状态"""
+        return self.state == self.STATE_CANCELLED
+
+    def can_be_cancelled(self) -> bool:
+        """检查是否可以取消（只有有效状态可以取消）"""
+        return self.is_active()
+
+    def can_be_completed(self) -> bool:
+        """检查是否可以完成（只有有效状态可以完成）"""
+        return self.is_active()
 
 
 @dataclass
