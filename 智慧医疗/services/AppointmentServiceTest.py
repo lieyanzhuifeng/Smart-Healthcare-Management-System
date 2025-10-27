@@ -87,7 +87,7 @@ def test_appointment_service_fixed():
         test_date = datetime.now().strftime('%Y-%m-%d')
         print(f"使用日期: {test_date}")
 
-    # 测试3: 获取医生排班信息
+    # 测试3: 获取医生排班信息1
     if test_doctor_id:
         print(f"\n3. 测试获取医生排班信息 - 日期: {test_date}:")
         doctor_schedule = service.get_doctor_schedule_by_date(test_doctor_id, test_date)
@@ -101,8 +101,9 @@ def test_appointment_service_fixed():
     print(f"\n4. 测试获取科室排班信息 - 日期: {test_date}:")
     office_schedule = service.get_office_schedule_by_date(test_office_id, test_date)
     print(f"科室 {test_office_name} 在 {test_date} 有 {len(office_schedule)} 条排班记录")
-    for i, schedule in enumerate(office_schedule[:5], 1):  # 只显示前5条
+    for i, schedule in enumerate(office_schedule[:], 1):
         print(f"  {i}. 医生: {schedule.doctor_name}(ID:{schedule.doctorID}), "
+              f"排班ID: {schedule.sectionID},"
               f"科室: {schedule.office_name}, 专长: {schedule.expertise_name}, 职位: {schedule.position_name}, "
               f"时间: {schedule.starttime} - {schedule.endtime}, "
               f"剩余名额: {schedule.restappiontment}")
@@ -225,27 +226,6 @@ def test_get_patient_appointments(service):
         print(f"  错误消息: {result.get('message')}")
 
 
-def test_appointment_availability(service):
-    """测试预约可用性检查"""
-    print("\n--- 测试预约可用性检查 ---")
-
-    section_id = get_user_input("请输入排班ID: ", int)
-    if not section_id:
-        print("排班ID不能为空")
-        return
-
-    print(f"\n正在检查排班 {section_id} 的预约可用性...")
-    result = service.check_appointment_availability(section_id)
-
-    print("\n可用性检查结果:")
-    print(f"  成功: {result.get('success')}")
-    if result.get('success'):
-        print(f"  排班ID: {result.get('section_id')}")
-        print(f"  剩余名额: {result.get('restappiontment')}")
-        print(f"  预约转挂号人数: {result.get('appiontmentconvert')}")
-        print(f"  是否可用: {'是' if result.get('is_available') else '否'}")
-    else:
-        print(f"  错误消息: {result.get('message')}")
 
 
 def main():
@@ -257,8 +237,7 @@ def main():
             print("\n请选择测试模式:")
             print("1. 基础功能测试 (科室、医生、排班查询)")
             print("2. 预约操作测试 (创建、取消、查询预约)")
-            print("3. 预约可用性检查")
-            print("4. 退出测试")
+            print("3. 退出测试")
 
             choice = get_user_input("请输入选择 (1-4): ", int)
 
@@ -267,9 +246,6 @@ def main():
             elif choice == 2:
                 test_appointment_operations()
             elif choice == 3:
-                service = AppointmentService()
-                test_appointment_availability(service)
-            elif choice == 4:
                 print("感谢使用测试程序！")
                 break
             else:
