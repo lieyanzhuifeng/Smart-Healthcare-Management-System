@@ -295,6 +295,72 @@ class SectionRepository(Base):
             print(f"创建挂号记录失败: {e}")
             return False
 
+    # ==================== 创建排班 ====================
+    def create_section(self, doctor_id: int, date: str, room_id: int, timeslot_id: int,
+                       restappiontment: int = 10, appiontmentconvert: int = 0,
+                       restregistration: int = 20, totalregistration: int = 20) -> bool:
+        """创建排班记录"""
+        try:
+            query = """
+                    INSERT INTO section
+                    (doctorID, date, roomID, timeslotID, restappiontment,
+                     appiontmentconvert, restregistration, totalregistration)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s) \
+                    """
+            result = self.execute_update(query, (
+                doctor_id, date, room_id, timeslot_id,
+                restappiontment, appiontmentconvert,
+                restregistration, totalregistration
+            ))
+            return result > 0
+        except Exception as e:
+            print(f"创建排班记录失败: {e}")
+            return False
+
+    def batch_create_sections(self, sections_data: List[Dict]) -> bool:
+        """批量创建排班记录"""
+        try:
+            success_count = 0
+            for section_data in sections_data:
+                success = self.create_section(
+                    doctor_id=section_data.get('doctorID'),
+                    date=section_data.get('date'),
+                    room_id=section_data.get('roomID'),
+                    timeslot_id=section_data.get('timeslotID'),
+                    restappiontment=section_data.get('restappiontment', 15),
+                    appiontmentconvert=section_data.get('appiontmentconvert', 0),
+                    restregistration=section_data.get('restregistration', 20),
+                    totalregistration=section_data.get('totalregistration', 20)
+                )
+                if success:
+                    success_count += 1
+
+            print(f"批量创建排班记录: 成功 {success_count}/{len(sections_data)} 条")
+            return success_count == len(sections_data)
+        except Exception as e:
+            print(f"批量创建排班记录失败: {e}")
+            return False
+
+    def delete_section(self, section_id: int) -> bool:
+        """删除排班记录"""
+        try:
+            query = "DELETE FROM section WHERE sectionID = %s"
+            result = self.execute_update(query, (section_id,))
+            return result > 0
+        except Exception as e:
+            print(f"删除排班记录失败: {e}")
+            return False
+
+    def get_sections_by_date_range(self, start_date: str, end_date: str) -> List[Section]:
+        """根据日期范围获取排班"""
+        try:
+            query = "SELECT * FROM section WHERE date BETWEEN %s AND %s ORDER BY date, timeslotID"
+            results = self.execute_query(query, (start_date, end_date))
+            return [Section.from_dict(row) for row in results] if results else []
+        except Exception as e:
+            print(f"获取日期范围排班失败: {e}")
+            return []
+
     # ==================== 兼容性方法 ====================
 
     def update_appointment_quota(self, section_id: int) -> bool:
