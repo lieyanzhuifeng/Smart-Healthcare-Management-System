@@ -185,9 +185,8 @@ class AppointmentService:
             if not appointment:
                 return {"success": False, "message": "未找到对应的预约记录"}
 
-            # 更新预约状态为已完成
-            # 这里需要AppointmentRepository有更新状态的方法
-            success = self.appointment_repo.update_appointment_state(appointment_id, "completed")
+            # 使用整数状态值
+            success = self.appointment_repo.update_appointment_state(appointment_id, 2)  # 2 = 已完成
 
             if success:
                 return {"success": True, "message": "预约已完成", "appointment_id": appointment_id}
