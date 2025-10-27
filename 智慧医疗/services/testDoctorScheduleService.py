@@ -19,7 +19,7 @@ def test_generate_and_save():
     success = schedule_service.generate_and_save_schedules(
         start_date="2025-10-27",
         end_date="2025-10-27",
-        timeslots=[1]
+        timeslots=[2]
     )
 
     print(f"结果: {'✅ 成功' if success else '❌ 失败'}")

@@ -175,3 +175,25 @@ class AppointmentService:
         except Exception as e:
             print(f"检查预约可用性时出错: {e}")
             return {"success": False, "message": f"检查可用性失败: {str(e)}"}
+
+    # 在AppointmentService类中添加
+    def complete_appointment(self, appointment_id: int) -> dict:
+        """标记预约为已完成"""
+        try:
+            # 验证预约是否存在
+            appointment = self.appointment_repo.get_appointment_by_id(appointment_id)
+            if not appointment:
+                return {"success": False, "message": "未找到对应的预约记录"}
+
+            # 更新预约状态为已完成
+            # 这里需要AppointmentRepository有更新状态的方法
+            success = self.appointment_repo.update_appointment_state(appointment_id, "completed")
+
+            if success:
+                return {"success": True, "message": "预约已完成", "appointment_id": appointment_id}
+            else:
+                return {"success": False, "message": "更新预约状态失败"}
+
+        except Exception as e:
+            print(f"完成预约时出错: {e}")
+            return {"success": False, "message": f"系统错误: {str(e)}"}

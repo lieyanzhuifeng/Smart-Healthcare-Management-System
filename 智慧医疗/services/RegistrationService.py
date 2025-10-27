@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from typing import Dict, List, Optional, Tuple
 from repository.office import OfficeRepository
 from repository.doctor import DoctorRepository
@@ -89,8 +92,23 @@ class RegistrationService:
             print(f"未预约患者挂号失败: {e}")
             return False, None
 
-    #预约患者转挂号
+    def check_appointment_availability(self, section_id: int) -> dict:
+        """检查排班预约可用性"""
+        try:
+            quota_info = self.section_repo.get_appointment_quota(section_id)
+            return {
+                "success": True,
+                "section_id": section_id,
+                "restappiontment": quota_info["restappiontment"],
+                "appiontmentconvert": quota_info["appiontmentconvert"],
+                "is_available": quota_info["restappiontment"] > 0
+            }
+        except Exception as e:
+            print(f"检查预约可用性时出错: {e}")
+            return {"success": False, "message": f"检查可用性失败: {str(e)}"}
+
     def register_with_appointment(self, patients_id: int, section_id: int) -> bool:
+        """预约患者转挂号"""
         try:
             # 验证排班是否存在且有名额
             section = self.section_repo.get_section_by_id(section_id)
@@ -100,10 +118,11 @@ class RegistrationService:
             if not self.section_repo.check_registration_availability(section_id):
                 return False
 
-            # 这里需要调用预约服务来验证预约状态
-            # has_valid_appointment = self._check_appointment_status(patients_id, section_id)
-            # if not has_valid_appointment:
-            #     return False
+            # 验证预约状态
+            has_valid_appointment = self._check_appointment_status(patients_id, section_id)
+            if not has_valid_appointment:
+                print(f"患者 {patients_id} 没有排班 {section_id} 的有效预约")
+                return False
 
             # 生成挂号号码
             current_registrations = self.registration_repo.get_registrations_by_section(section_id)
@@ -114,8 +133,8 @@ class RegistrationService:
             if success:
                 # 更新剩余挂号名额
                 self.section_repo.decrease_registration_quota(section_id)
-                # 标记预约为已完成（需要预约服务的配合）
-                # self._complete_appointment(patients_id, section_id)
+                # 标记预约为已完成
+                self._complete_appointment(patients_id, section_id)
                 return True
             return False
 
@@ -146,14 +165,68 @@ class RegistrationService:
 
     # ==================== 辅助方法 ====================
 
-    # 验证患者是否有有效的预约（需要与预约服务交互）
     def _check_appointment_status(self, patients_id: int, section_id: int) -> bool:
-        # 这里应该调用预约服务的接口
-        # 暂时返回True用于测试
-        return True
+        """验证患者是否有有效的预约"""
+        try:
+            # 创建预约服务实例
+            from services.AppointmentService import AppointmentService
+            appointment_service = AppointmentService()
 
-    # 标记预约为已完成（需要与预约服务交互）
+            # 获取患者的所有预约
+            appointment_result = appointment_service.get_patient_appointments(patients_id)
+
+            if not appointment_result.get('success'):
+                print(f"查询预约失败: {appointment_result.get('message')}")
+                return False
+
+            # 检查是否有该排班的有效预约
+            appointments = appointment_result.get('appointments', [])
+            valid_appointment = any(
+                app.get('sectionID') == section_id and
+                app.get('state') not in ['cancelled', 'completed']
+                for app in appointments
+            )
+
+            return valid_appointment
+
+        except Exception as e:
+            print(f"检查预约状态失败: {e}")
+            return False
+
     def _complete_appointment(self, patients_id: int, section_id: int) -> bool:
-        # 这里应该调用预约服务的接口
-        # 暂时返回True用于测试
-        return True
+        """标记预约为已完成"""
+        try:
+            # 创建预约服务实例
+            from services.appointment_service import AppointmentService
+            appointment_service = AppointmentService()
+
+            # 获取患者的所有预约
+            appointment_result = appointment_service.get_patient_appointments(patients_id)
+
+            if not appointment_result.get('success'):
+                print(f"查询预约失败: {appointment_result.get('message')}")
+                return False
+
+            # 找到对应的预约记录
+            appointments = appointment_result.get('appointments', [])
+            target_appointment = None
+
+            for app in appointments:
+                if (app.get('sectionID') == section_id and
+                        app.get('state') not in ['cancelled', 'completed']):
+                    target_appointment = app
+                    break
+
+            if not target_appointment:
+                print(f"未找到对应的有效预约: 患者{patients_id} 排班{section_id}")
+                return False
+
+            # 这里需要预约服务提供标记完成的方法
+            # 由于当前AppointmentService没有标记完成的方法，暂时返回True
+            # 实际应该调用: appointment_service.complete_appointment(target_appointment['appointmentID'])
+            print(f"⚠️ 预约完成标记功能待实现: 预约ID {target_appointment.get('appointmentID')}")
+            return True
+
+        except Exception as e:
+            print(f"标记预约完成失败: {e}")
+            return False

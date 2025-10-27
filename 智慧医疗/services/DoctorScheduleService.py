@@ -148,7 +148,7 @@ class DoctorScheduleService:
 
     # 根据日期范围，自动生成排班数据，并且保存进数据库
     def generate_and_save_schedules(self, start_date: str, end_date: str, timeslots: List[int] = [1, 2, 3, 4]) -> bool:
-        """生成并保存排班（一站式服务）"""
+        """生成并保存排班（一站式服务）- 智能防重复"""
         try:
             # 生成排班
             schedules = self.generate_schedules(start_date, end_date, timeslots)
@@ -157,12 +157,49 @@ class DoctorScheduleService:
                 print("⚠️ 没有生成任何排班记录")
                 return False
 
+            # 智能过滤：只添加不冲突的新排班
+            filtered_schedules = self._filter_conflicting_schedules(schedules)
+
+            if not filtered_schedules:
+                print("✅ 所有排班时段已被占用，无需重复生成")
+                return True
+
+            print(f"📊 排班生成统计:")
+            print(f"   - 理论排班数: {len(schedules)}")
+            print(f"   - 实际可添加: {len(filtered_schedules)}")
+            print(f"   - 跳过重复: {len(schedules) - len(filtered_schedules)}")
+
             # 保存到数据库
-            return self.save_schedules_to_database(schedules)
+            return self.save_schedules_to_database(filtered_schedules)
 
         except Exception as e:
             print(f"❌ 生成并保存排班失败: {e}")
             return False
+
+    def _filter_conflicting_schedules(self, schedules: List[Dict]) -> List[Dict]:
+        """过滤掉冲突的排班（医生-日期-时间段冲突）"""
+        filtered = []
+
+        for schedule in schedules:
+            doctor_id = schedule['doctorID']
+            date = schedule['date']
+            timeslot_id = schedule['timeslotID']
+
+            # 检查该医生在该日期该时间段是否已有排班
+            existing_sections = self.section_repo.get_sections_by_doctor_and_date(doctor_id, date)
+
+            # 检查时间段冲突
+            timeslot_conflict = any(
+                section.timeslotID == timeslot_id
+                for section in existing_sections
+            )
+
+            if not timeslot_conflict:
+                filtered.append(schedule)
+            else:
+                print(f"⚠️ 跳过冲突排班: 医生{doctor_id} 在{date} 时段{timeslot_id} 已有排班")
+
+        return filtered
 
     def clear_schedules(self, start_date: str, end_date: str) -> bool:
         """清除指定日期范围的排班"""
