@@ -42,7 +42,7 @@ def test_medical_record_service():
                     print(f"✅ 找到 {len(records)} 条病历记录:")
                     for i, record in enumerate(records, 1):
                         print(f"\n--- 第 {i} 条病历 ---")
-                        print(f"病历ID: {record['infID']}")
+                        print(f"病历ID: {record['registrationID']}")
                         print(f"就诊时间: {record['time']}")
                         print(f"诊断信息: {record['information']}")
                         print(f"是否有药品: {'是' if record['have_medicine'] else '否'}")
@@ -74,14 +74,14 @@ def test_medical_record_service():
 
         elif choice == '2':
             try:
-                inf_id = input("请输入病历ID: ").strip()
-                if not inf_id:
+                registration_id = input("请输入病历ID: ").strip()
+                if not registration_id:
                     print("错误：请输入病历ID")
                     continue
 
-                inf_id = int(inf_id)
-                print(f"\n查询病历 {inf_id} 的处方详情...")
-                prescription = medical_service.get_prescription_details(inf_id)
+                registration_id = int(registration_id)
+                print(f"\n查询病历 {registration_id} 的处方详情...")
+                prescription = medical_service.get_prescription_details(registration_id)
 
                 if prescription:
                     print(f"✅ 找到 {len(prescription)} 种药品:")
@@ -185,12 +185,14 @@ def quick_statistics_test():
                     # 找到有处方的病历
                     for record in records:
                         if record['have_medicine']:
-                            inf_id = record['infID']
-                            print(f"\n2. 病历 {inf_id} 的处方统计:")
-                            prescription_summary = medical_service.get_prescription_by_medicine(inf_id)
-                            if prescription_summary.get('medicines'):
-                                print(f"   药品数量: {prescription_summary.get('total_medicines')}")
-                                print(f"   处方总价: {prescription_summary.get('total_price')} 元")
+                            registration_id = record['registrationID']
+                            print(f"\n2. 病历 {registration_id} 的处方详情:")
+                            prescription_details = medical_service.get_prescription_details(registration_id)
+                            if prescription_details:
+                                total_medicines = len(prescription_details)
+                                total_price = sum(item['order'].price for item in prescription_details)
+                                print(f"   药品数量: {total_medicines}")
+                                print(f"   处方总价: {total_price} 元")
                             break
             else:
                 print("   无病历记录")

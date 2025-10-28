@@ -25,7 +25,7 @@ class MedicalRecordService:
             for record in medical_records:
                 # 将 MedicalRecordView 对象转换为字典
                 record_dict = {
-                    'infID': record.infID,
+                    'registrationID': record.registrationID,
                     'time': record.time,
                     'information': record.information,
                     'have_medicine': record.have_medicine,
@@ -34,8 +34,8 @@ class MedicalRecordService:
 
                 # 如果有药品信息，则获取处方详情
                 if record.have_medicine:
-                    inf_id = record.infID
-                    prescription_details = self.get_prescription_details(inf_id)
+                    registration_id = record.registrationID
+                    prescription_details = self.get_prescription_details(registration_id)
                     record_dict['prescription'] = prescription_details
                 else:
                     record_dict['prescription'] = []
@@ -48,12 +48,12 @@ class MedicalRecordService:
             print(f"服务层获取患者病历时出错: {e}")
             return []
 
-    def get_prescription_details(self, inf_id: int) -> List[dict]:
+    def get_prescription_details(self, registration_id: int) -> List[dict]:
         """
         获取处方详情
         """
         try:
-            return self.information_repo.get_prescription_details(inf_id)
+            return self.information_repo.get_prescription_details(registration_id)
         except Exception as e:
             print(f"服务层获取处方详情时出错: {e}")
             return []

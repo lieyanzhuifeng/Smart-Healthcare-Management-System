@@ -58,7 +58,7 @@ class Expertise:
 
 @dataclass
 class Information:
-    infID: int
+    registrationID: int
     doctorID: int
     patientsID: int
     time: datetime
@@ -68,7 +68,7 @@ class Information:
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
-            infID=data.get('infID'),
+            registrationID=data.get('registrationID'),
             doctorID=data.get('doctorID'),
             patientsID=data.get('patientsID'),
             time=data.get('time'),
@@ -110,7 +110,7 @@ class Office:
 @dataclass
 class OrderForMedicine:
     orderID: int
-    infID: int
+    registrationID: int
     medicineID: int
     amount: int
     price: float
@@ -119,7 +119,7 @@ class OrderForMedicine:
     def from_dict(cls, data: dict):
         return cls(
             orderID=data.get('orderID'),
-            infID=data.get('infID'),
+            registrationID=data.get('registrationID'),
             medicineID=data.get('medicineID'),
             amount=data.get('amount'),
             price=float(data.get('price', 0))

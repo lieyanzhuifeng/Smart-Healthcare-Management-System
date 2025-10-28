@@ -13,7 +13,7 @@ from typing import List
 @dataclass
 class MedicalRecordView:
     """病历视图模型"""
-    infID: int
+    registrationID: int
     time: datetime
     information: str
     have_medicine: bool
@@ -22,7 +22,7 @@ class MedicalRecordView:
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
-            infID=data.get('infID'),
+            registrationID=data.get('registrationID'),
             time=data.get('time'),
             information=data.get('information'),
             have_medicine=data.get('have_medicine'),
@@ -34,7 +34,7 @@ class InformationRepository(Base):
     def get_patient_medical_records(self, patients_id: int) -> List[MedicalRecordView]:
         """获取患者病历 - 对应需求13"""
         query = """
-                SELECT i.infID, i.time, i.information, i.have_medicine,
+                SELECT i.registrationID, i.time, i.information, i.have_medicine,
                        d.doctorID, d.name as doctor_name, d.age, 
                        o.name as office_name, e.name as expertise_name, 
                        p.name as position_name, d.NumberOfPatients
@@ -64,7 +64,7 @@ class InformationRepository(Base):
                 )
 
                 medical_record = MedicalRecordView(
-                    infID=row['infID'],
+                    registrationID=row['registrationID'],
                     time=row['time'],
                     information=row['information'],
                     have_medicine=bool(row['have_medicine']),
@@ -78,19 +78,19 @@ class InformationRepository(Base):
             print(f"获取患者病历时出错: {e}")
             return []
 
-    def get_prescription_details(self, inf_id: int) -> List[dict]:
+    def get_prescription_details(self, registration_id: int) -> List[dict]:
         """获取处方详情 - 对应需求14"""
         query = """
                 SELECT m.medicineID, m.name, m.price, m.description, 
                        o.amount, o.price as total_price, o.orderID
                 FROM order_for_medicine o
                          JOIN medicine m ON o.medicineID = m.medicineID
-                WHERE o.infID = %s
+                WHERE o.registrationID = %s
                 """
 
         try:
             # 使用 Base 类提供的 execute_query 方法
-            results = self.execute_query(query, (inf_id,))
+            results = self.execute_query(query, (registration_id,))
 
             # 转换为字典列表，包含 Medicine 和 OrderForMedicine 对象
             prescription_details = []
@@ -104,7 +104,7 @@ class InformationRepository(Base):
 
                 order = OrderForMedicine(
                     orderID=row['orderID'],
-                    infID=inf_id,
+                    registrationID=registration_id,
                     medicineID=row['medicineID'],
                     amount=row['amount'],
                     price=float(row['total_price'])
