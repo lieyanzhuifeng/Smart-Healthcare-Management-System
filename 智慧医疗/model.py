@@ -10,13 +10,15 @@ class Patient:
     patientsID: int
     name: str
     age: int
+    password_hash: str  # 新增：密码哈希字段
 
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
             patientsID=data.get('patientsID'),
             name=data.get('name'),
-            age=data.get('age')
+            age=data.get('age'),
+            password_hash=data.get('password_hash', '')  # 默认为空字符串
         )
 
 
@@ -29,6 +31,7 @@ class Doctor:
     officeID: int
     positionID: int
     NumberOfPatients: int
+    password_hash: str  # 新增：密码哈希字段
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -39,7 +42,8 @@ class Doctor:
             expertiseID=data.get('expertiseID'),
             officeID=data.get('officeID'),
             positionID=data.get('positionID'),
-            NumberOfPatients=data.get('NumberOfPatients')
+            NumberOfPatients=data.get('NumberOfPatients'),
+            password_hash=data.get('password_hash', '')  # 默认为空字符串
         )
 
 
@@ -263,6 +267,7 @@ class Appointment:
         """检查是否可以完成（只有有效状态可以完成）"""
         return self.is_active()
 
+
 @dataclass
 class Registration:
     patientsID: int
@@ -384,7 +389,6 @@ class DoctorDisplayView:
         )
 
 
-
 # 导出所有模型类
 __all__ = [
     'Patient',
@@ -400,6 +404,6 @@ __all__ = [
     'Room',
     'Section',
     'Timeslot',
-    'Appointment'
+    'Appointment',
     'DoctorDisplayView'
 ]
