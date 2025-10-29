@@ -10,6 +10,7 @@ from admin import bp as admin_bp
 
 app = Flask(__name__)
 
+
 # 注册蓝图
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(patient_bp, url_prefix='/patient')
@@ -24,3 +25,5 @@ def hello():
 if __name__ == '__main__':
     print("启动服务器...")
     app.run(debug=True, port=5000)
+
+

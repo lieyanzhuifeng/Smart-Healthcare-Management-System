@@ -388,22 +388,43 @@ class DoctorDisplayView:
             NumberOfPatients=data.get('NumberOfPatients')
         )
 
+@dataclass
+class PharmacyMan:
+    pharmacymanID: int
+    name: str
+    age: int
+    password_hash: str
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            pharmacymanID=data.get('pharmacymanID'),
+            name=data.get('name'),
+            age=data.get('age'),
+            password_hash=data.get('password_hash', '')
+        )
+
+@dataclass
+class Admin:
+    adminID: int
+    name: str
+    age: int
+    password_hash: str
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            adminID=data.get('adminID'),
+            name=data.get('name'),
+            age=data.get('age'),
+            password_hash=data.get('password_hash', '')
+        )
 
 # 导出所有模型类
 __all__ = [
-    'Patient',
-    'Doctor',
-    'Expertise',
-    'Information',
-    'Medicine',
-    'Office',
-    'OrderForMedicine',
-    'Pharmacy',
-    'Position',
-    'Registration',
-    'Room',
-    'Section',
-    'Timeslot',
-    'Appointment',
-    'DoctorDisplayView'
+    'Patients', 'Doctor', 'Expertise', 'Information', 'Medicine',
+    'Office', 'OrderForMedicine', 'Pharmacy', 'Position', 'Registration',
+    'Room', 'Section', 'Timeslot', 'Appointment', 'DoctorDisplayView',
+    'PharmacyMan', 'Admin'  # 新增的两个类
 ]
+

@@ -8,13 +8,50 @@ from typing import List, Dict
 from repository.doctor import DoctorRepository
 from repository.room import RoomRepository
 from repository.section import SectionRepository
-
+from repository.timeslot import TimeslotRepository
 
 class DoctorScheduleService:
     def __init__(self):
         self.doctor_repo = DoctorRepository()
         self.room_repo = RoomRepository()
         self.section_repo = SectionRepository()
+        self.timeslot_repo = TimeslotRepository()
+
+    # 按照日期查看排班
+    def get_schedules_preview(self, date: str) -> List[Dict]:
+        """获取指定日期的排班预览（包含详细信息）"""
+        try:
+            sections = self.section_repo.get_sections_by_date(date)
+
+            if not sections:
+                return []
+
+            detailed_schedules = []
+            for section in sections:
+                doctor = self.doctor_repo.get_doctor_by_id(section.doctorID)
+                timeslot = self.timeslot_repo.get_timeslot_by_id(section.timeslotID)  # 直接使用
+                room = self.room_repo.get_room_by_id(section.roomID)
+
+                schedule_info = {
+                    "sectionID": section.sectionID,
+                    "doctorID": section.doctorID,
+                    "doctorName": doctor.name if doctor else "未知医生",
+                    "date": str(section.date),
+                    "roomID": section.roomID,
+                    "roomNumber": room.roomID if room else "未知房间",
+                    "timeslotID": section.timeslotID,
+                    "timeRange": f"{timeslot.starttime}-{timeslot.endtime}" if timeslot else "未知时间段",
+                    "restappiontment": section.restappiontment,
+                    "restregistration": section.restregistration,
+                    "totalregistration": section.totalregistration
+                }
+                detailed_schedules.append(schedule_info)
+
+            return detailed_schedules
+
+        except Exception as e:
+            print(f"❌ 获取排班预览失败: {e}")
+            return []
 
     #根据日期范围，自动生成排班数据，但不保存进数据库
     def generate_schedules(self, start_date: str, end_date: str, timeslots: List[int] = [1, 2, 3, 4]) -> List[Dict]:

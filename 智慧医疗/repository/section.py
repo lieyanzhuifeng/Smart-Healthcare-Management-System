@@ -22,6 +22,17 @@ class SectionRepository(Base):
             print(f"获取排班信息失败: {e}")
             return None
 
+    # 根据日期获取所有排班
+    def get_sections_by_date(self, date: str) -> List[Section]:
+        """根据日期获取所有排班"""
+        try:
+            query = "SELECT * FROM section WHERE date = %s"
+            results = self.execute_query(query, (date,))
+            return [Section.from_dict(row) for row in results] if results else []
+        except Exception as e:
+            print(f"获取日期排班失败: {e}")
+            return []
+
     # 获取医生某天的所有排班
     def get_sections_by_doctor_and_date(self, doctor_id: int, date: str) -> List[Section]:
         try:
@@ -50,7 +61,7 @@ class SectionRepository(Base):
 
     # ==================== 业务查询函数 ====================
 
-    # 获取医生某天的排班信息 - 对应需求3
+    # 获取医生某天的排班信息
     def get_doctor_schedule_by_date(self, doctor_id: int, date: str) -> List[dict]:
         try:
             query = """
@@ -66,7 +77,7 @@ class SectionRepository(Base):
             print(f"获取医生排班信息失败: {e}")
             return []
 
-    # 获取科室某天的排班信息 - 对应需求4（返回医生显示视图格式）
+    # 获取科室某天的排班信息
     def get_office_schedule_by_date(self, office_id: int, date: str) -> List[DoctorDisplayView]:
         """获取科室某天的排班信息 - 对应需求4（返回医生显示视图格式）"""
         # 先获取科室名称
@@ -116,7 +127,7 @@ class SectionRepository(Base):
             print(f"获取科室排班信息失败: {e}")
             return []
 
-    # 获取当前时间段的挂号名额 - 对应需求8
+    # 获取当前时间段的挂号名额
     def get_current_timeslot_availability(self, office_id: int, date: str, timeslot_id: int) -> Dict:
         try:
             query = """

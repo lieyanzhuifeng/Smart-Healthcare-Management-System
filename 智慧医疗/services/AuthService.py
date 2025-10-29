@@ -8,22 +8,31 @@ import jwt
 import datetime
 from repository.patient import PatientRepository
 from repository.doctor import DoctorRepository
+from repository.pharmacyman import PharmacyManRepository
+from repository.admin import AdminRepository
 
 
 class AuthService:
     def __init__(self):
         self.patient_repo = PatientRepository()
         self.doctor_repo = DoctorRepository()
+        self.pharmacyman_repo = PharmacyManRepository()
+        self.admin_repo = AdminRepository()
         self.secret_key = "your-secret-key"
 
     def login(self, username, password, role):
         try:
             user_id = int(username)
 
+            # 根据角色选择对应的repository
             if role == 'patient':
                 user = self.patient_repo.get_patient_by_id(user_id)
             elif role == 'doctor':
                 user = self.doctor_repo.get_doctor_by_id(user_id)
+            elif role == 'pharmacy':
+                user = self.pharmacyman_repo.get_pharmacyman_by_id(user_id)
+            elif role == 'admin':
+                user = self.admin_repo.get_admin_by_id(user_id)
             else:
                 return {"code": 400, "message": "无效的角色"}
 
@@ -82,6 +91,26 @@ class AuthService:
                     "officeID": user.officeID,
                     "positionID": user.positionID
                 }
+            elif role == 'pharmacy':
+                user = self.pharmacyman_repo.get_pharmacyman_by_id(user_id)
+                profile_data = {
+                    "id": user.pharmacymanID,
+                    "name": user.name,
+                    "role": role,
+                    "age": user.age,
+                    "avatar": None,
+                    "phone": None
+                }
+            elif role == 'admin':
+                user = self.admin_repo.get_admin_by_id(user_id)
+                profile_data = {
+                    "id": user.adminID,
+                    "name": user.name,
+                    "role": role,
+                    "age": user.age,
+                    "avatar": None,
+                    "phone": None
+                }
             else:
                 return {"code": 400, "message": "无效的角色"}
 
@@ -118,12 +147,25 @@ class AuthService:
         return jwt.encode(payload, self.secret_key, algorithm='HS256')
 
     def build_user_info(self, user, role):
+        # 根据角色确定ID字段名
+        if role == 'patient':
+            user_id = user.patientsID
+        elif role == 'doctor':
+            user_id = user.doctorID
+        elif role == 'pharmacy':
+            user_id = user.pharmacymanID
+        elif role == 'admin':
+            user_id = user.adminID
+        else:
+            user_id = 0
+
         base_info = {
-            "id": user.patientsID if role == 'patient' else user.doctorID,
+            "id": user_id,
             "name": user.name,
             "role": role
         }
 
+        # 根据不同角色添加特有信息
         if role == 'patient':
             base_info["extInfo"] = {
                 "age": user.age
@@ -133,6 +175,14 @@ class AuthService:
                 "expertiseID": user.expertiseID,
                 "officeID": user.officeID,
                 "positionID": user.positionID
+            }
+        elif role == 'pharmacy':
+            base_info["extInfo"] = {
+                "age": user.age
+            }
+        elif role == 'admin':
+            base_info["extInfo"] = {
+                "age": user.age
             }
 
         return base_info
