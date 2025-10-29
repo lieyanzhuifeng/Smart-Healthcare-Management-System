@@ -43,8 +43,9 @@ def test_get_daily_schedule(service):
         print(f"\n医生 {doctor_id} 在 {date} 的有效挂号信息:")
         for reg in registrations:
             print(f"  挂号ID: {reg['registrationID']}, 患者: {reg['patient_name']}({reg['patient_age']}岁), "
-                  f"状态: {service.registration_repo.get_registration_state_description(reg['state'])}, "
-                  f"时间: {reg['date']} {reg['starttime']}-{reg['endtime']}")
+                  f"状态: {reg['state']}, "
+                  f"时间: {reg['date']} {reg['starttime']}-{reg['endtime']},"
+                  f"序号：{reg['number']}")
     else:
         print("未找到相关挂号信息")
 
@@ -123,57 +124,106 @@ def test_get_all_medicines(service):
 def test_complete_visit_workflow(service):
     """测试完整就诊流程"""
     print("\n--- 完整就诊流程 ---")
-    registration_id = input_registration_id()
-    information = input("请输入病历内容: ")
-    doctor_id = int(input("请输入医生ID: "))
-    have_medicine = input("是否开药? (y/n): ").lower() == 'y'
 
-    medicine_orders = []
-    if have_medicine:
-        # 显示所有药品
-        medicines = service.get_medicines_for_prescription()
-        print("\n可用药品列表:")
-        for med in medicines:
-            print(f"  药品ID: {med['medicineID']}, 名称: {med['name']}, 价格: {med['price']}元")
-
-        while True:
-            print("\n添加药品 (输入0结束):")
-            medicine_id = int(input("请输入药品ID: "))
-            if medicine_id == 0:
-                break
-            amount = int(input("请输入数量: "))
-            medicine_orders.append({"medicineID": medicine_id, "amount": amount})
-            print(f"已添加药品ID: {medicine_id}, 数量: {amount}")
-
-    success = service.complete_patient_visit(registration_id, information, doctor_id, have_medicine, medicine_orders)
-    if success:
-        print("完整就诊流程执行成功")
-    else:
-        print("完整就诊流程执行失败")
-
-
-def test_get_workflow_data(service):
-    """测试获取完整工作流程数据"""
-    print("\n--- 获取完整工作流程数据 ---")
+    # 1. 查看医生某天的挂号列表
+    print("\n步骤1: 查看医生排班")
     doctor_id, date = input_doctor_date()
+    registrations = service.get_doctor_daily_schedule(doctor_id, date)
 
-    workflow_data = service.get_patient_visit_workflow(doctor_id, date)
+    if not registrations:
+        print("该医生当天没有挂号记录")
+        return False
 
-    print(f"\n医生 {doctor_id} 在 {date} 的工作数据:")
+    print(f"\n医生 {doctor_id} 在 {date} 的挂号列表:")
+    for i, reg in enumerate(registrations, 1):
+        print(f"  {i}. 挂号ID: {reg['registrationID']}, 患者: {reg['patient_name']}({reg['patient_age']}岁), "
+              f"状态: {reg['state']},时间: {reg['date']} {reg['starttime']}-{reg['endtime']}, 序号: {reg['number']}")
 
-    print("\n挂号列表:")
-    if workflow_data["registrations"]:
-        for reg in workflow_data["registrations"]:
-            print(f"  挂号ID: {reg['registrationID']}, 患者: {reg['patient_name']}({reg['patient_age']}岁)")
-    else:
-        print("  无挂号信息")
+    # 2. 选择挂号开始问诊
+    print("\n步骤2: 选择挂号开始问诊")
+    try:
+        choice = int(input("请选择要就诊的挂号编号 (输入前面的数字): "))
+        if choice < 1 or choice > len(registrations):
+            print("无效的选择")
+            return False
 
-    print("\n药品列表:")
-    if workflow_data["medicines"]:
-        for med in workflow_data["medicines"]:
-            print(f"  药品ID: {med['medicineID']}, 名称: {med['name']}, 价格: {med['price']}元")
-    else:
-        print("  无药品信息")
+        selected_reg = registrations[choice - 1]
+        registration_id = selected_reg['registrationID']
+        patient_name = selected_reg['patient_name']
+
+        print(f"已选择患者: {patient_name}, 挂号ID: {registration_id}")
+
+        # 开始就诊
+        print(f"\n步骤3: 开始就诊")
+        start_success = service.start_patient_visit(registration_id)
+        if not start_success:
+            print("开始就诊失败")
+            return False
+        print("就诊开始成功")
+
+        # 3. 写病历
+        print(f"\n步骤4: 填写病历")
+        information = input("请输入病历内容: ")
+        have_medicine = input("是否需要开药? (y/n): ").lower() == 'y'
+
+        # 创建就诊记录
+        record_success = service.create_patient_medical_record(
+            registration_id, information, doctor_id, have_medicine
+        )
+        if not record_success:
+            print("创建就诊记录失败")
+            return False
+        print("就诊记录创建成功")
+
+        # 4. 如果需要开药，则开药
+        if have_medicine:
+            print(f"\n步骤5: 开药")
+            # 显示所有药品
+            medicines = service.get_medicines_for_prescription()
+            print("\n可用药品列表:")
+            for med in medicines:
+                print(f"  药品ID: {med['medicineID']}, 名称: {med['name']}, 价格: {med['price']}元")
+
+            medicine_orders = []
+            while True:
+                print("\n添加药品 (输入0结束):")
+                try:
+                    medicine_id = int(input("请输入药品ID: "))
+                    if medicine_id == 0:
+                        break
+                    amount = int(input("请输入数量: "))
+                    medicine_orders.append({"medicineID": medicine_id, "amount": amount})
+                    print(f"已添加药品ID: {medicine_id}, 数量: {amount}")
+                except ValueError:
+                    print("请输入有效的数字！")
+
+            if medicine_orders:
+                prescribe_success = service.prescribe_medicines(registration_id, medicine_orders)
+                if prescribe_success:
+                    print("开药成功")
+                else:
+                    print("开药失败")
+                    return False
+            else:
+                print("未添加任何药品")
+        else:
+            print("无需开药，就诊流程完成")
+
+        print(f"\n✅ 完整就诊流程执行成功！")
+        print(f"   患者: {patient_name}")
+        print(f"   挂号ID: {registration_id}")
+        print(f"   病历已记录: {information}")
+        if have_medicine:
+            print(f"   已开药: {len(medicine_orders)} 种药品")
+
+        return True
+
+    except ValueError:
+        print("请输入有效的数字")
+        return False
+    except Exception as e:
+        print(f"就诊流程执行失败: {e}")
+        return False
 
 
 def main():
@@ -202,8 +252,6 @@ def main():
                 test_get_all_medicines(service)
             elif choice == '6':
                 test_complete_visit_workflow(service)
-            elif choice == '7':
-                test_get_workflow_data(service)
             else:
                 print("无效选择，请重新输入！")
 

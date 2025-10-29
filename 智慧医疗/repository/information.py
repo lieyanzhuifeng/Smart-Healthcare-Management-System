@@ -9,7 +9,7 @@ from model import DoctorDisplayView, Medicine, OrderForMedicine
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List
-
+from model import Registration
 
 @dataclass
 class MedicalRecordView:
