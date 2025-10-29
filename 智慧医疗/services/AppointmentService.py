@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from typing import List, Optional
-from model import Office, Doctor, Section, DoctorDisplayView
+from model import Office, Doctor, Section, DoctorDisplayView,Appointment
 from repository.office import OfficeRepository
 from repository.doctor import DoctorRepository
 from repository.section import SectionRepository
@@ -102,21 +102,24 @@ class AppointmentService:
             print(f"取消预约时出错: {e}")
             return {"success": False, "message": f"系统错误: {str(e)}"}
 
-    # 获取患者所有预约信息
+    # 获取患者所有预约
     def get_patient_appointments(self, patients_id: int) -> dict:
         try:
             # 获取所有预约记录
             appointments = self.appointment_repo.get_patient_appointments(patients_id)
             # 获取有效预约（用于统计）
             active_appointments = self.appointment_repo.get_active_appointments_by_patient(patients_id)
-            # 统计信息
+
+            # 统计信息 - 使用模型中的状态常量
             stats = {
                 "total": len(appointments),
                 "active": len(active_appointments),
-                "cancelled": len([a for a in appointments if a.get('state') == 'cancelled']),
-                "completed": len([a for a in appointments if a.get('state') == 'completed'])
+                "cancelled": len([a for a in appointments if a.get('state') == Appointment.STATE_CANCELLED]),  # 3
+                "completed": len([a for a in appointments if a.get('state') == Appointment.STATE_COMPLETED])  # 2
             }
+
             return {"success": True, "appointments": appointments, "statistics": stats}
+
         except Exception as e:
             print(f"获取患者预约信息时出错: {e}")
             return {

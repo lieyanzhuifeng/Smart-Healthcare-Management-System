@@ -29,38 +29,38 @@ def test_admin_schedule_workflow():
     # print("\n2. 测试管理员健康检查")
     # test_api("/admin/health", "GET", headers=headers)
 
-    # 3. 生成排班（预览）
-    print("\n3. 生成排班预览")
-    generate_data = {
-        "startDate": "2025-10-29",
-        "endDate": "2025-10-29",
-        "timeslots": [3]  # 只生成上午和下午的排班
-    }
-    generate_result = test_api("/admin/schedules/generate", "POST", generate_data, headers)
-
-    if not generate_result or generate_result.get("code") != 200:
-        print("❌ 生成排班失败")
-        return
-
-    schedules = generate_result["data"]["schedules"]
-    print(f"✅ 成功生成 {len(schedules)} 条排班记录")
-
-    # 4. 保存排班到数据库
-    if schedules:
-        print("\n4. 保存排班到数据库")
-        save_data = {
-            "schedules": schedules
-        }
-        save_result = test_api("/admin/schedules/save", "POST", save_data, headers)
-
-    # # 5. 测试一键生成并保存
-    # print("\n5. 测试一键生成并保存")
-    # quick_generate_data = {
+    # # 3. 生成排班（预览）
+    # print("\n3. 生成排班预览")
+    # generate_data = {
     #     "startDate": "2025-10-29",
     #     "endDate": "2025-10-29",
-    #     "timeslots": [3]  # 只生成上午排班
+    #     "timeslots": [3]  # 只生成上午和下午的排班
     # }
-    # test_api("/admin/schedules/generate-and-save", "POST", quick_generate_data, headers)
+    # generate_result = test_api("/admin/schedules/generate", "POST", generate_data, headers)
+    #
+    # if not generate_result or generate_result.get("code") != 200:
+    #     print("❌ 生成排班失败")
+    #     return
+    #
+    # schedules = generate_result["data"]["schedules"]
+    # print(f"✅ 成功生成 {len(schedules)} 条排班记录")
+    #
+    # # 4. 保存排班到数据库
+    # if schedules:
+    #     print("\n4. 保存排班到数据库")
+    #     save_data = {
+    #         "schedules": schedules
+    #     }
+    #     save_result = test_api("/admin/schedules/save", "POST", save_data, headers)
+
+    # 5. 测试一键生成并保存
+    print("\n5. 测试一键生成并保存")
+    quick_generate_data = {
+        "startDate": "2025-10-29",
+        "endDate": "2025-10-29",
+        "timeslots": [4]  # 只生成上午排班
+    }
+    test_api("/admin/schedules/generate-and-save", "POST", quick_generate_data, headers)
 
     # 6. 测试预览排班
     print("\n6. 测试预览排班")

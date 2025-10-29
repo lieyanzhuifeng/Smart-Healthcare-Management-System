@@ -1,8 +1,22 @@
 # tool_of_test.py
 import requests
 import json
+from datetime import datetime, timedelta, date
 
 BASE_URL = "http://localhost:5000"
+
+
+# 自定义JSON编码器来处理timedelta等特殊类型
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        elif isinstance(obj, timedelta):
+            return str(obj)  # 或者 obj.total_seconds()
+        elif hasattr(obj, '__dict__'):
+            return obj.__dict__
+        return super().default(obj)
+
 
 def test_api(endpoint, method="GET", data=None, headers=None):
     """测试真实API连接"""
@@ -29,8 +43,10 @@ def test_api(endpoint, method="GET", data=None, headers=None):
         try:
             result = response.json()
             print("返回数据:")
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        except:
+            # 使用自定义编码器来序列化包含特殊类型的数据
+            print(json.dumps(result, indent=2, ensure_ascii=False, cls=CustomJSONEncoder))
+        except Exception as e:
+            print(f"JSON解析失败: {e}")
             print(f"响应内容: {response.text}")
 
         print(f"{'=' * 60}")
@@ -40,4 +56,3 @@ def test_api(endpoint, method="GET", data=None, headers=None):
     except Exception as e:
         print(f"请求失败: {e}")
         return None
-

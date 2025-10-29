@@ -124,7 +124,9 @@ class RegistrationService:
     # 获取患者所有挂号信息
     def get_patient_registrations(self, patients_id: int) -> List[Dict]:
         try:
-            return self.registration_repo.get_patient_registrations(patients_id)
+            registrations = self.registration_repo.get_patient_registrations(patients_id)
+
+            return registrations
         except Exception as e:
             print(f"获取患者挂号记录失败: {e}")
             return []
@@ -134,17 +136,16 @@ class RegistrationService:
     # 验证患者是否有有效的预约
     def _check_appointment_status(self, patients_id: int, section_id: int) -> bool:
         try:
-            # 修复导入问题 - 使用正确的模块名
-            from AppointmentService import AppointmentService
-            appointment_service = AppointmentService()
-            # 获取患者的所有预约
-            appointment_result = appointment_service.get_patient_appointments(patients_id)
+            # 直接使用初始化好的 appointment_service
+            appointment_result = self.appointment_service.get_patient_appointments(patients_id)
             if not appointment_result.get('success'):
                 print(f"查询预约失败: {appointment_result.get('message')}")
                 return False
             # 检查是否有该排班的有效预约
             appointments = appointment_result.get('appointments', [])
-            valid_appointment = any(app.get('sectionID') == section_id and app.get('state') not in ['cancelled', 'completed'] for app in appointments)
+            valid_appointment = any(
+                app.get('sectionID') == section_id and app.get('state') not in ['cancelled', 'completed'] for app in
+                appointments)
             return valid_appointment
         except Exception as e:
             print(f"检查预约状态失败: {e}")

@@ -86,10 +86,20 @@ class AppointmentRepository(Base):
     def get_patient_appointments(self, patients_id: int) -> List[dict]:
         """获取患者所有预约信息 - 对应需求7"""
         query = """
-                SELECT a.appointmentID, a.sectionID, a.state,
-                       d.doctorID, d.name as doctor_name, d.age,
-                       o.name as office_name, e.name as expertise_name, p.name as position_name,
-                       s.date, t.starttime, t.endtime, s.restappiontment
+                SELECT a.appointmentID, \
+                       a.patientsID, \
+                       a.sectionID, \
+                       a.state, -- 添加了 a.patientsID
+                       d.doctorID, \
+                       d.name as doctor_name, \
+                       d.age,
+                       o.name as office_name, \
+                       e.name as expertise_name, \
+                       p.name as position_name,
+                       s.date, \
+                       t.starttime, \
+                       t.endtime, \
+                       s.restappiontment
                 FROM appointment a
                          JOIN section s ON a.sectionID = s.sectionID
                          JOIN doctor d ON s.doctorID = d.doctorID

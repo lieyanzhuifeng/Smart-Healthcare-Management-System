@@ -1,17 +1,38 @@
 # api/patient.py
 import sys
 import os
-# 添加这一行 - 告诉Python去上一级目录找模块
+import json
+from datetime import datetime, date, timedelta
+
+# 添加项目路径
 sys.path.append('..')
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from services.AppointmentService import AppointmentService
 from services.RegistrationService import RegistrationService
 from services.AuthService import AuthService
+from repository.office import OfficeRepository
+from repository.patient import PatientRepository
 
 bp = Blueprint('patient', __name__)
 appointment_service = AppointmentService()
 registration_service = RegistrationService()
 auth_service = AuthService()
+office_repo = OfficeRepository()
+patient_repo = PatientRepository()
+
+
+class CustomJSONEncoder(json.JSONEncoder):
+    """自定义JSON编码器处理特殊类型"""
+
+    def default(self, obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        elif isinstance(obj, timedelta):
+            return str(obj)
+        elif hasattr(obj, '__dict__'):
+            # 处理对象序列化
+            return obj.__dict__
+        return super().default(obj)
 
 
 def get_current_patient_id():
@@ -21,6 +42,23 @@ def get_current_patient_id():
         return None
     user_info = auth_service.verify_token(token)
     return user_info.get('user_id') if user_info and user_info.get('role') == 'patient' else None
+
+
+def safe_json_response(data, status=200):
+    """安全的JSON响应处理"""
+    try:
+        return jsonify(data)
+    except Exception as e:
+        # 如果常规序列化失败，使用自定义编码器
+        try:
+            response_data = json.dumps(data, cls=CustomJSONEncoder, ensure_ascii=False)
+            return Response(response_data, mimetype='application/json')
+        except Exception as final_error:
+            error_response = {
+                "code": 500,
+                "message": f"数据序列化错误: {str(final_error)}"
+            }
+            return jsonify(error_response)
 
 
 @bp.route('/appointments', methods=['GET'])
@@ -33,23 +71,23 @@ def get_appointments():
     try:
         result = appointment_service.get_patient_appointments(patient_id)
         if result.get('success'):
-            appointments = []
-            for appt in result.get('appointments', []):
-                appointments.append({
-                    "id": appt.get('appointmentID'),
-                    "date": appt.get('date', '').split(' ')[0] if appt.get('date') else '',
-                    "time": appt.get('time', ''),
-                    "department": appt.get('office_name', ''),
-                    "doctor": appt.get('doctor_name', ''),
-                    "status": map_appointment_status(appt.get('state'))
-                })
+            appointments = result.get('appointments', [])
 
-            return jsonify({
+            # 构建标准化的响应数据
+            response_data = {
                 "code": 200,
-                "data": appointments
-            })
+                "message": "获取预约列表成功",
+                "data": {
+                    "appointments": appointments,
+                    "statistics": result.get('statistics', {})
+                }
+            }
+            return safe_json_response(response_data)
         else:
-            return jsonify({"code": 500, "message": result.get('message', '获取预约失败')})
+            return jsonify({
+                "code": 500,
+                "message": result.get('message', '获取预约失败')
+            })
     except Exception as e:
         return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
 
@@ -62,8 +100,10 @@ def create_appointment():
         return jsonify({"code": 401, "message": "未认证"})
 
     data = request.get_json()
-    section_id = data.get('sectionId')
+    if not data:
+        return jsonify({"code": 400, "message": "请求数据不能为空"})
 
+    section_id = data.get('sectionId')
     if not section_id:
         return jsonify({"code": 400, "message": "缺少sectionId参数"})
 
@@ -73,10 +113,16 @@ def create_appointment():
             return jsonify({
                 "code": 200,
                 "message": "预约成功",
-                "data": {"appointmentId": result.get('section_id')}
+                "data": {
+                    "appointmentId": result.get('appointment_id'),
+                    "sectionId": result.get('section_id')
+                }
             })
         else:
-            return jsonify({"code": 400, "message": result.get('message', '预约失败')})
+            return jsonify({
+                "code": 400,
+                "message": result.get('message', '预约失败')
+            })
     except Exception as e:
         return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
 
@@ -91,9 +137,266 @@ def cancel_appointment(appointment_id):
     try:
         result = appointment_service.cancel_appointment(appointment_id)
         if result.get('success'):
-            return jsonify({"code": 200, "message": "取消成功"})
+            return jsonify({
+                "code": 200,
+                "message": "取消预约成功"
+            })
         else:
-            return jsonify({"code": 400, "message": result.get('message', '取消失败')})
+            return jsonify({
+                "code": 400,
+                "message": result.get('message', '取消预约失败')
+            })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/offices', methods=['GET'])
+def get_all_offices():
+    """获取所有科室信息"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        offices = office_repo.get_all_offices()
+        offices_data = []
+
+        for office in offices:
+            offices_data.append({
+                "officeID": office.officeID,
+                "name": office.name,
+                "description": getattr(office, 'description', '')
+            })
+
+        return jsonify({
+            "code": 200,
+            "message": "获取科室列表成功",
+            "data": offices_data
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/doctors/by-office/<int:office_id>', methods=['GET'])
+def get_doctors_by_office(office_id):
+    """根据科室获取医生列表"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        doctors = appointment_service.get_doctors_by_office(office_id)
+        doctors_data = []
+
+        for doctor in doctors:
+            doctors_data.append({
+                "doctorID": doctor.doctorID,
+                "doctor_name": doctor.doctor_name,
+                "age": doctor.age,
+                "office_name": doctor.office_name,
+                "expertise_name": doctor.expertise_name,
+                "position_name": doctor.position_name,
+                "NumberOfPatients": doctor.NumberOfPatients
+            })
+
+        return jsonify({
+            "code": 200,
+            "message": "获取医生列表成功",
+            "data": doctors_data
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/schedule/doctor', methods=['GET'])
+def get_doctor_schedule():
+    """获取医生排班信息"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    doctor_id = request.args.get('doctorId', type=int)
+    date_str = request.args.get('date')
+
+    if not doctor_id or not date_str:
+        return jsonify({"code": 400, "message": "缺少doctorId或date参数"})
+
+    try:
+        schedule = appointment_service.get_doctor_schedule_by_date(doctor_id, date_str)
+        return safe_json_response({
+            "code": 200,
+            "message": "获取医生排班成功",
+            "data": schedule
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/schedule/office', methods=['GET'])
+def get_office_schedule():
+    """获取科室排班信息"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    office_id = request.args.get('officeId', type=int)
+    date_str = request.args.get('date')
+
+    if not office_id or not date_str:
+        return jsonify({"code": 400, "message": "缺少officeId或date参数"})
+
+    try:
+        schedule = appointment_service.get_office_schedule_by_date(office_id, date_str)
+        return safe_json_response({
+            "code": 200,
+            "message": "获取科室排班成功",
+            "data": schedule
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+
+@bp.route('/registration/appointment-availability/<int:section_id>', methods=['GET'])
+def check_appointment_availability(section_id):
+    """检查预约转挂号的可用性"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        result = registration_service.check_appointment_availability(section_id)
+        return jsonify({
+            "code": 200,
+            "message": "获取预约可用性成功",
+            "data": result
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/registration/register', methods=['POST'])
+def register_patient():
+    """患者挂号（支持直接挂号和预约转挂号）"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"code": 400, "message": "请求数据不能为空"})
+
+    office_id = data.get('officeId')
+    datetime_str = data.get('datetime')
+    section_id = data.get('sectionId')
+
+    try:
+        if section_id:
+            # 预约患者转挂号
+            print(f"🔍 API层调试: 患者 {patient_id} 预约转挂号 section {section_id}")
+            success = registration_service.register_with_appointment(patient_id, section_id)
+            print(f"🔍 API层调试: register_with_appointment 返回 {success}")
+
+            if success:
+                # 获取挂号详情
+                print(f"🔍 API调试: patient_id={patient_id}, section_id={section_id}")
+                details = registration_service.get_registration_details(patient_id, section_id)
+                print(f"🔍 API层调试: 获取挂号详情成功")
+                return safe_json_response({
+                    "code": 200,
+                    "message": "挂号成功",
+                    "data": details
+                })
+            else:
+                print(f"🔍 API层调试: register_with_appointment 返回 False，挂号失败")
+                return jsonify({"code": 400, "message": "挂号失败"})
+        else:
+            # 未预约患者直接挂号
+            if not office_id or not datetime_str:
+                return jsonify({"code": 400, "message": "缺少officeId或datetime参数"})
+
+            success, new_section_id = registration_service.register_without_appointment(
+                patient_id, office_id, datetime_str)
+            if success:
+                details = registration_service.get_registration_details(patient_id, new_section_id)
+                return safe_json_response({
+                    "code": 200,
+                    "message": "挂号成功",
+                    "data": details
+                })
+            else:
+                return jsonify({"code": 400, "message": "挂号失败，可能没有可用名额"})
+    except Exception as e:
+        print(f"🔍 API层调试: 发生异常 {e}")
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/registration/history', methods=['GET'])
+def get_registration_history():
+    """获取患者挂号历史"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        registrations = registration_service.get_patient_registrations(patient_id)
+        return safe_json_response({
+            "code": 200,
+            "message": "获取挂号历史成功",
+            "data": registrations
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/registration/details', methods=['GET'])
+def get_registration_details():
+    """获取挂号详情"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    section_id = request.args.get('sectionId', type=int)
+    if not section_id:
+        return jsonify({"code": 400, "message": "缺少sectionId参数"})
+
+    try:
+        details = registration_service.get_registration_details(patient_id, section_id)
+        if "error" in details:
+            return jsonify({"code": 400, "message": details["error"]})
+
+        return safe_json_response({
+            "code": 200,
+            "message": "获取挂号详情成功",
+            "data": details
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/profile', methods=['GET'])
+def get_patient_profile():
+    """获取患者个人信息"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        patient = patient_repo.get_patient_by_id(patient_id)
+        if not patient:
+            return jsonify({"code": 404, "message": "患者信息不存在"})
+
+        patient_data = {
+            "patientID": patient.patientsID,
+            "name": patient.name,
+            "age": patient.age,
+        }
+
+        return jsonify({
+            "code": 200,
+            "message": "获取患者信息成功",
+            "data": patient_data
+        })
     except Exception as e:
         return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
 
@@ -105,11 +408,15 @@ def get_reports():
     if not patient_id:
         return jsonify({"code": 401, "message": "未认证"})
 
-    # 暂时返回空数据，后续实现
-    return jsonify({
-        "code": 200,
-        "data": []
-    })
+    try:
+        # 暂时返回空数据，后续实现具体逻辑
+        return jsonify({
+            "code": 200,
+            "message": "获取报告成功",
+            "data": []
+        })
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
 
 
 @bp.route('/reminders', methods=['GET'])
@@ -129,24 +436,26 @@ def get_reminders():
                 if appt.get('state') == 1:  # 有效预约
                     reminders.append({
                         "id": appt.get('appointmentID'),
-                        "time": f"今天 {appt.get('time', '')}",
+                        "type": "预约提醒",
                         "content": f"您有一个预约：{appt.get('office_name', '')} - {appt.get('doctor_name', '')}",
-                        "type": "预约"
+                        "time": f"{appt.get('date', '')} {appt.get('starttime', '')}",
+                        "status": "待就诊"
                     })
 
         return jsonify({
             "code": 200,
+            "message": "获取提醒成功",
             "data": reminders
         })
     except Exception as e:
         return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
 
 
-def map_appointment_status(state):
-    """映射预约状态"""
-    status_map = {
-        1: "待就诊",
-        2: "已完成",
-        3: "已取消"
-    }
-    return status_map.get(state, "未知状态")
+@bp.route('/test/connection', methods=['GET'])
+def test_connection():
+    """测试连接接口"""
+    return jsonify({
+        "code": 200,
+        "message": "患者API连接正常",
+        "timestamp": datetime.now().isoformat()
+    })

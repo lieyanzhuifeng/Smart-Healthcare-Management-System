@@ -35,7 +35,25 @@ class RegistrationRepository(Base):
     # 获取患者所有挂号信息
     def get_patient_registrations(self, patients_id: int) -> List[dict]:
         try:
-            query = "SELECT r.*, d.*, s.roomID, s.date, t.starttime, t.endtime, o.name as office_name, e.name as expertise_name, p.name as position_name FROM registration r JOIN section s ON r.sectionID = s.sectionID JOIN doctor d ON s.doctorID = d.doctorID JOIN office o ON d.officeID = o.officeID JOIN expertise e ON d.expertiseID = e.expertiseID JOIN position p ON d.positionID = p.positionID JOIN timeslot t ON s.timeslotID = t.timeslotID WHERE r.patientsID = %s ORDER BY s.date DESC, t.starttime DESC"
+            query = """
+                    SELECT r.registrationID, \
+                           r.patientsID, \
+                           r.sectionID, \
+                           r.number, \
+                           r.state, \
+                           s.date, \
+                           t.starttime as starttime, \
+                           t.endtime   as endtime, \
+                           d.name                               as doctor_name, \
+                           o.name                               as office_name
+                    FROM registration r
+                             JOIN section s ON r.sectionID = s.sectionID
+                             JOIN doctor d ON s.doctorID = d.doctorID
+                             JOIN office o ON d.officeID = o.officeID
+                             JOIN timeslot t ON s.timeslotID = t.timeslotID
+                    WHERE r.patientsID = %s
+                    ORDER BY s.date DESC, t.starttime DESC \
+                    """
             return self.execute_query(query, (patients_id,))
         except Exception as e:
             print(f"获取患者挂号信息失败: {e}")
