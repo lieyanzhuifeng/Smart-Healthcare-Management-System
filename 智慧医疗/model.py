@@ -6,7 +6,7 @@ from typing import Optional
 
 
 @dataclass
-class Patient:
+class Patients:
     patientsID: int
     name: str
     age: int
@@ -290,7 +290,7 @@ class Registration:
         1: "就诊中",
         2: "已开处方",
         3: "药品已准备",
-        4: "已取药",
+        4: "已取药/已完成",
         5: "已取消"
     }
 

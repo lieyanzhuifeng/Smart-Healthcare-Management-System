@@ -3,6 +3,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from repository.base import Base
+from repository.registration import RegistrationRepository
 from model import DoctorDisplayView, Medicine, OrderForMedicine
 
 from dataclasses import dataclass
@@ -31,6 +32,10 @@ class MedicalRecordView:
 
 
 class InformationRepository(Base):
+    def __init__(self):
+        super().__init__()
+        self.registration_repo = RegistrationRepository()  # 在这里初始化
+
     def get_patient_medical_records(self, patients_id: int) -> List[MedicalRecordView]:
         """获取患者病历 - 对应需求13"""
         query = """
@@ -121,3 +126,46 @@ class InformationRepository(Base):
         except Exception as e:
             print(f"获取处方详情时出错: {e}")
             return []
+
+    # 为挂号编写就诊记录
+    def create_medical_record(self, registration_id: int, information: str, doctor_id: int,
+                              have_medicine: bool) -> bool:
+        try:
+            # 首先通过registration_repo获取患者ID
+            registration_info = self.registration_repo.get_registration_by_id(registration_id)
+            if not registration_info:
+                print(f"挂号记录 {registration_id} 不存在")
+                return False
+
+            patients_id = registration_info['patientsID']
+
+            # 插入就诊记录到information表
+            query = """
+                   INSERT INTO information (registrationID, doctorID, patientsID, time, have_medicine, information) 
+                   VALUES (%s, %s, %s, NOW(), %s, %s)
+               """
+            result = self.execute_update(query, (registration_id, doctor_id, patients_id, have_medicine, information))
+
+            if result > 0:
+                print(f"就诊记录插入成功，挂号ID: {registration_id}")
+
+                # 如果不开药，直接将挂号状态改为4（已取药）
+                if not have_medicine:
+                    update_success = self.registration_repo.update_registration_state(registration_id,
+                                                                                      Registration.STATE_MEDICINE_TAKEN)
+                    if update_success:
+                        print(f"未开药，挂号 {registration_id} 状态已更新为已取药")
+                    else:
+                        print(f"未开药，但挂号 {registration_id} 状态更新失败")
+                    return update_success
+                # 如果开药，状态保持为就诊中，等待调用开药函数
+                else:
+                    print(f"已记录需要开药，请调用开药函数为挂号 {registration_id} 开药")
+                    return True
+            else:
+                print("就诊记录插入失败")
+                return False
+
+        except Exception as e:
+            print(f"创建就诊记录失败: {e}")
+            return False

@@ -128,6 +128,54 @@ class RegistrationRepository(Base):
             print(f"获取排班挂号数量失败: {e}")
             return 0
 
+    # 根据日期和医生ID获取有效的挂号信息和患者信息
+    def get_active_registrations_by_doctor_and_date(self, doctor_id: int, date: str) -> List[dict]:
+        try:
+            query = """
+                SELECT 
+                    r.registrationID,
+                    r.patientsID,
+                    r.sectionID,
+                    r.number,
+                    r.state,
+                    p.name as patient_name,
+                    p.age as patient_age,
+                    s.date,
+                    t.starttime,
+                    t.endtime
+                FROM registration r
+                JOIN patients p ON r.patientsID = p.patientsID
+                JOIN section s ON r.sectionID = s.sectionID
+                JOIN timeslot t ON s.timeslotID = t.timeslotID
+                WHERE s.doctorID = %s 
+                AND DATE(s.date) = %s
+                AND r.state != %s
+                ORDER BY r.number, t.starttime
+            """
+            return self.execute_query(query, (doctor_id, date, Registration.STATE_CANCELLED))
+        except Exception as e:
+            print(f"获取医生{doctor_id}在日期{date}的有效挂号信息失败: {e}")
+            return []
+
+    # 将挂号状态改为就诊中
+    def start_medical_visit(self, registration_id: int) -> bool:
+        try:
+            query = "UPDATE registration SET state = %s WHERE registrationID = %s AND state = %s"
+            result = self.execute_update(query, (Registration.STATE_IN_PROGRESS, registration_id,
+                                                 Registration.STATE_REGISTERED))
+
+            if result > 0:
+                print(f"挂号 {registration_id} 状态已更新为就诊中")
+                return True
+            else:
+                print(f"挂号 {registration_id} 状态更新失败：当前状态不允许更新或挂号不存在")
+                return False
+
+        except Exception as e:
+            print(f"更新挂号状态为就诊中失败: {e}")
+            return False
+
+
     # 获取状态描述
     def get_registration_state_description(self, state: int) -> str:
         return Registration.STATE_DESCRIPTIONS.get(state, "未知状态")

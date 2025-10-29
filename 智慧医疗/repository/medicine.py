@@ -1,6 +1,11 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from typing import List, Optional, Dict
-from model import Medicine, Pharmacy, OrderForMedicine
+from model import Medicine, Pharmacy, OrderForMedicine, Registration
 from repository.base import Base
+from repository.registration import RegistrationRepository
 
 
 class MedicineRepository(Base):
@@ -87,8 +92,11 @@ class PharmacyRepository(Base):
         return False
 
 
-class OrderRepository(Base):
+class MedicalOrderRepository(Base):
     """药品订单管理"""
+    def __init__(self):
+        super().__init__()
+        self.registration_repo = RegistrationRepository()  # 在这里初始化
 
     def create_medicine_order(self, inf_id: int, medicine_id: int, amount: int, price: float) -> bool:
         """创建药品订单"""
@@ -135,3 +143,64 @@ class OrderRepository(Base):
                 ORDER BY i.time DESC
                 """
         return self.execute_query(query, (patient_id,))
+
+    # 为患者开药
+    def prescribe_medicine(self, registration_id: int, medicine_orders: List[dict]) -> bool:
+        try:
+            # 验证挂号是否存在且状态正确（应该是就诊中状态）
+            registration_info = self.registration_repo.get_registration_by_id(registration_id)
+            if not registration_info:
+                print(f"挂号记录 {registration_id} 不存在")
+                return False
+
+            # 检查挂号状态是否为就诊中（允许开药）
+            if registration_info['state'] != Registration.STATE_IN_PROGRESS:
+                print(f"挂号 {registration_id} 状态不允许开药，当前状态: {registration_info['state']}")
+                return False
+
+            # 遍历药品订单，插入订单记录
+            for order in medicine_orders:
+                medicine_id = order.get('medicineID')
+                amount = order.get('amount')
+
+                if not medicine_id or not amount:
+                    print("药品订单数据不完整，跳过")
+                    continue
+
+                # 获取药品价格
+                price_query = "SELECT price FROM medicine WHERE medicineID = %s"
+                price_result = self.execute_query(price_query, (medicine_id,))
+
+                if not price_result:
+                    print(f"药品ID {medicine_id} 不存在，跳过")
+                    continue
+
+                medicine_price = price_result[0]['price']
+                total_price = medicine_price * amount
+
+                # 插入订单记录
+                insert_query = """
+                    INSERT INTO order_for_medicine (registrationID, medicineID, amount, price) 
+                    VALUES (%s, %s, %s, %s)
+                """
+                result = self.execute_update(insert_query, (registration_id, medicine_id, amount, total_price))
+
+                if result > 0:
+                    print(f"药品订单插入成功: 药品ID {medicine_id}, 数量 {amount}, 总价 {total_price}")
+                else:
+                    print(f"药品订单插入失败: 药品ID {medicine_id}")
+                    return False
+
+            # 所有药品订单插入成功后，将挂号状态更新为已开处方
+            update_success = self.registration_repo.update_registration_state(registration_id,
+                                                                              Registration.STATE_PRESCRIBED)
+            if update_success:
+                print(f"开药完成，挂号 {registration_id} 状态已更新为已开处方")
+            else:
+                print(f"开药完成，但挂号 {registration_id} 状态更新失败")
+
+            return update_success
+
+        except Exception as e:
+            print(f"开药操作失败: {e}")
+            return False
