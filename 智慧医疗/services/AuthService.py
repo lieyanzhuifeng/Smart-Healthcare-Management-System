@@ -7,6 +7,7 @@ import jwt
 import datetime
 import hashlib
 import secrets
+import time
 from repository.account import AccountRepository
 
 
@@ -34,7 +35,7 @@ class AuthService:
             if not self.verify_password(password, getattr(user, 'password_hash', None)):
                 return {"code": 401, "message": "密码错误"}
 
-            # 生成token
+
             token = self.generate_token(user_id, role)
 
             # 构建用户信息
@@ -290,48 +291,68 @@ class AuthService:
             return {"code": 500, "message": f"获取账户信息失败: {str(e)}"}
 
     # 以下方法保持不变...
-    def get_profile_by_token(self, token):
-        try:
-            payload = jwt.decode(token, self.secret_key, algorithms=['HS256'])
-            user_id = payload['user_id']
-            role = payload['role']
-
-            # 使用account_repo获取用户信息
-            result = self.account_repo.get_account_info(user_id, role)
-            if result["success"]:
-                # 构建完整的profile数据
-                profile_data = result["data"]
-                # 添加一些默认字段
-                profile_data.update({
-                    "avatar": None,
-                    "phone": None
-                })
-                return {"code": 200, "data": profile_data}
-            else:
-                return {"code": 404, "message": result["message"]}
-
-        except jwt.ExpiredSignatureError:
-            return {"code": 401, "message": "token已过期"}
-        except jwt.InvalidTokenError:
-            return {"code": 401, "message": "无效的token"}
-        except Exception as e:
-            return {"code": 500, "message": f"获取信息失败: {str(e)}"}
-
     def verify_token(self, token):
-        """验证token并返回payload"""
-        try:
-            payload = jwt.decode(token, self.secret_key, algorithms=['HS256'])
-            return payload
-        except:
+        """简单token验证"""
+        if not hasattr(self, 'active_tokens'):
             return None
+        return self.active_tokens.get(token)
+
+    def get_profile_by_token(self, token):
+        """获取用户信息"""
+        token_info = self.verify_token(token)
+        if not token_info:
+            return {"code": 401, "message": "token无效"}
+
+        user_id = token_info['user_id']
+        role = token_info['role']
+
+        result = self.account_repo.get_account_info(user_id, role)
+        if result["success"]:
+            return {"code": 200, "data": result["data"]}
+        else:
+            return {"code": 404, "message": result["message"]}
 
     def generate_token(self, user_id, role):
-        payload = {
+        """改进的token生成 - 有时效性"""
+        import secrets
+        import time
+        import hashlib
+
+        # 加入时间戳确保唯一性和时效性
+        timestamp = int(time.time())
+        expires_in = 24 * 3600  # 24小时
+
+        token_data = f"{user_id}:{role}:{timestamp}:{expires_in}:{secrets.token_hex(16)}"
+        token = hashlib.sha256(token_data.encode()).hexdigest()
+
+        if not hasattr(self, 'active_tokens'):
+            self.active_tokens = {}
+
+        self.active_tokens[token] = {
             'user_id': user_id,
             'role': role,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'created_at': timestamp,
+            'expires_at': timestamp + expires_in
         }
-        return jwt.encode(payload, self.secret_key, algorithm='HS256')
+
+        # 定期清理过期token
+        self.clean_expired_tokens()
+
+        return token
+
+    def clean_expired_tokens(self):
+        """清理过期token"""
+        if not hasattr(self, 'active_tokens'):
+            return
+
+        current_time = time.time()
+        expired_tokens = [
+            token for token, info in self.active_tokens.items()
+            if current_time > info['expires_at']
+        ]
+
+        for token in expired_tokens:
+            del self.active_tokens[token]
 
     def build_user_info(self, user, role):
         # 根据角色确定ID字段名
