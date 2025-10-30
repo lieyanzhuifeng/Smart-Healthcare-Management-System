@@ -63,7 +63,7 @@ def test_medical_record_service():
                             for item in prescription:
                                 medicine = item['medicine']
                                 order = item['order']
-                                print(f"  - {medicine.name}: {order.amount}盒, 总价: {order.price}元")
+                                print(f"  - {medicine.name}: {order.amount}盒, 总价: {order.price}元, 药品描述：{medicine.description}")
                 else:
                     print("❌ 未找到该患者的病历记录")
 

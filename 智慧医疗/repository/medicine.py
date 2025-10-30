@@ -47,6 +47,50 @@ class MedicineRepository(Base):
         result = self.execute_update(query, (name, price, description, medicine_id))
         return result > 0
 
+    def get_all_medicines_with_stock(self) -> List[Dict]:
+        """
+        获取所有药品信息及库存数量
+        """
+        query = """
+            SELECT 
+                m.medicineID,
+                m.name,
+                m.price,
+                m.description,
+                COALESCE(p.number, 0) as stock_number
+            FROM medicine m
+            LEFT JOIN pharmacy p ON m.medicineID = p.medicineID
+            ORDER BY m.medicineID
+        """
+        try:
+            results = self.execute_query(query)
+            return results if results else []
+        except Exception as e:
+            print(f"获取药品及库存信息失败: {e}")
+            return []
+
+    def get_medicines_with_stock_by_name(self, name: str) -> List[Dict]:
+        """
+        根据药品名称搜索药品信息及库存数量
+        """
+        query = """
+            SELECT 
+                m.medicineID,
+                m.name,
+                m.price,
+                m.description,
+                COALESCE(p.number, 0) as stock_number
+            FROM medicine m
+            LEFT JOIN pharmacy p ON m.medicineID = p.medicineID
+            WHERE m.name LIKE %s
+            ORDER BY m.medicineID
+        """
+        try:
+            results = self.execute_query(query, (f"%{name}%",))
+            return results if results else []
+        except Exception as e:
+            print(f"搜索药品及库存信息失败: {e}")
+            return []
 
 class PharmacyRepository(Base):
     """药品库存管理"""
@@ -91,6 +135,194 @@ class PharmacyRepository(Base):
             return self.update_medicine_stock(medicine_id, new_quantity)
         return False
 
+    def dispense_medicine(self, registration_id: int) -> Dict:
+        """
+        为处方配药
+        """
+        try:
+            # 1. 检查挂号状态是否为2（已开处方）
+            registration_repo = RegistrationRepository()
+            registration_info = registration_repo.get_registration_by_id(registration_id)
+
+            if not registration_info:
+                return {
+                    'success': False,
+                    'message': f'挂号记录 {registration_id} 不存在'
+                }
+
+            if registration_info['state'] != 2:
+                return {
+                    'success': False,
+                    'message': f'挂号状态不允许配药，当前状态: {registration_info["state"]}，需要状态: 2'
+                }
+
+            # 2. 获取该处方的所有药品订单
+            medical_order_repo = MedicalOrderRepository()
+            orders_with_info = medical_order_repo.get_orders_with_medicine_info(registration_id)
+
+            if not orders_with_info:
+                return {
+                    'success': False,
+                    'message': f'处方 {registration_id} 没有药品订单'
+                }
+
+            # 3. 检查库存是否足够
+            insufficient_stock_medicines = []
+            for order in orders_with_info:
+                medicine_id = order['medicineID']
+                medicine_name = order['medicine_name']
+                required_amount = order['amount']
+
+                stock_info = self.get_medicine_stock(medicine_id)
+                current_stock = stock_info.number if stock_info else 0
+
+                if current_stock < required_amount:
+                    insufficient_stock_medicines.append({
+                        'medicine_id': medicine_id,
+                        'medicine_name': medicine_name,
+                        'required': required_amount,
+                        'current': current_stock
+                    })
+
+            if insufficient_stock_medicines:
+                medicine_list = ", ".join([
+                    f"{med['medicine_name']}(需{med['required']}，库存{med['current']})"
+                    for med in insufficient_stock_medicines
+                ])
+                return {
+                    'success': False,
+                    'message': f'库存不足，无法配药。缺货药品: {medicine_list}',
+                    'insufficient_medicines': insufficient_stock_medicines
+                }
+
+            # 4. 减少库存
+            for order in orders_with_info:
+                medicine_id = order['medicineID']
+                required_amount = order['amount']
+
+                stock_success = self.decrease_stock(medicine_id, required_amount)
+                if not stock_success:
+                    return {
+                        'success': False,
+                        'message': f'减少药品ID {medicine_id} 库存失败'
+                    }
+
+            # 5. 更新挂号状态为3（药品已准备）
+            update_success = registration_repo.update_registration_state(registration_id, 3)
+            if not update_success:
+                return {
+                    'success': False,
+                    'message': f'配药完成，但更新挂号状态失败'
+                }
+
+            # 6. 返回成功结果
+            medicine_list = ", ".join([
+                f"{order['medicine_name']} x{order['amount']}"
+                for order in orders_with_info
+            ])
+            total_price = sum(order['price'] for order in orders_with_info)
+
+            return {
+                'success': True,
+                'message': f'配药成功',
+                'registration_id': registration_id,
+                'medicine_list': medicine_list,
+                'total_price': total_price,
+                'dispensed_medicines': [
+                    {
+                        'medicine_id': order['medicineID'],
+                        'medicine_name': order['medicine_name'],
+                        'amount': order['amount'],
+                        'price': order['price']
+                    }
+                    for order in orders_with_info
+                ]
+            }
+
+        except Exception as e:
+            print(f"配药操作失败: {e}")
+            return {
+                'success': False,
+                'message': f'配药操作失败: {str(e)}'
+            }
+
+    def take_medicine(self, registration_id: int) -> Dict:
+        """
+        病人取药
+        """
+        try:
+            # 1. 检查挂号状态是否为3（药品已准备）
+            registration_repo = RegistrationRepository()
+            registration_info = registration_repo.get_registration_by_id(registration_id)
+
+            if not registration_info:
+                return {
+                    'success': False,
+                    'message': f'挂号记录 {registration_id} 不存在'
+                }
+
+            if registration_info['state'] != 3:
+                return {
+                    'success': False,
+                    'message': f'当前状态不允许取药，当前状态: {registration_info["state"]}，需要状态: 3（药品已准备）'
+                }
+
+            # 2. 获取药品订单信息（用于返回给用户）
+            medical_order_repo = MedicalOrderRepository()
+            orders_with_info = medical_order_repo.get_orders_with_medicine_info(registration_id)
+
+            # 3. 更新挂号状态为4（已取药）
+            update_success = registration_repo.update_registration_state(registration_id, 4)
+            if not update_success:
+                return {
+                    'success': False,
+                    'message': f'更新挂号状态失败'
+                }
+
+            # 4. 返回成功结果
+            if orders_with_info:
+                medicine_list = ", ".join([
+                    f"{order['medicine_name']} x{order['amount']}"
+                    for order in orders_with_info
+                ])
+                total_price = sum(order['price'] for order in orders_with_info)
+
+                return {
+                    'success': True,
+                    'message': f'取药成功',
+                    'registration_id': registration_id,
+                    'medicine_list': medicine_list,
+                    'total_price': total_price,
+                    'patient_name': registration_info.get('patientsID', '未知患者'),
+                    'medicines': [
+                        {
+                            'medicine_id': order['medicineID'],
+                            'medicine_name': order['medicine_name'],
+                            'amount': order['amount'],
+                            'unit_price': order['unit_price'],
+                            'total_price': order['price']
+                        }
+                        for order in orders_with_info
+                    ]
+                }
+            else:
+                return {
+                    'success': True,
+                    'message': f'取药成功（无药品信息）',
+                    'registration_id': registration_id,
+                    'medicine_list': '',
+                    'total_price': 0,
+                    'patient_name': registration_info.get('patientsID', '未知患者'),
+                    'medicines': []
+                }
+
+        except Exception as e:
+            print(f"取药操作失败: {e}")
+            return {
+                'success': False,
+                'message': f'取药操作失败: {str(e)}'
+            }
+
 
 class MedicalOrderRepository(Base):
     """药品订单管理"""
@@ -100,13 +332,13 @@ class MedicalOrderRepository(Base):
 
     def create_medicine_order(self, inf_id: int, medicine_id: int, amount: int, price: float) -> bool:
         """创建药品订单"""
-        query = "INSERT INTO order_for_medicine (infID, medicineID, amount, price) VALUES (%s, %s, %s, %s)"
+        query = "INSERT INTO order_for_medicine (registrationID, medicineID, amount, price) VALUES (%s, %s, %s, %s)"
         result = self.execute_update(query, (inf_id, medicine_id, amount, price))
         return result > 0
 
     def get_orders_by_information(self, inf_id: int) -> List[OrderForMedicine]:
         """根据问诊信息获取订单"""
-        query = "SELECT * FROM order_for_medicine WHERE infID = %s"
+        query = "SELECT * FROM order_for_medicine WHERE registrationID = %s"
         results = self.execute_query(query, (inf_id,))
         return [OrderForMedicine.from_dict(row) for row in results] if results else []
 
@@ -116,7 +348,7 @@ class MedicalOrderRepository(Base):
                 SELECT o.*, m.name as medicine_name, m.price as unit_price
                 FROM order_for_medicine o
                          JOIN medicine m ON o.medicineID = m.medicineID
-                WHERE o.infID = %s
+                WHERE o.registrationID = %s
                 """
         return self.execute_query(query, (inf_id,))
 
@@ -138,7 +370,7 @@ class MedicalOrderRepository(Base):
                 SELECT o.*, m.name as medicine_name, i.time as order_time
                 FROM order_for_medicine o
                          JOIN medicine m ON o.medicineID = m.medicineID
-                         JOIN information i ON o.infID = i.infID
+                         JOIN information i ON o.registrationID = i.registrationID
                 WHERE i.patientIsD = %s
                 ORDER BY i.time DESC
                 """
@@ -204,3 +436,38 @@ class MedicalOrderRepository(Base):
         except Exception as e:
             print(f"开药操作失败: {e}")
             return False
+
+    def get_prescriptions_by_state(self, state: int) -> List[Dict]:
+        """
+        根据状态获取处方信息和患者信息
+        """
+        query = """
+            SELECT 
+                r.registrationID,
+                r.patientsID,
+                p.name as patient_name,
+                p.age as patient_age,
+                r.sectionID,
+                r.state,
+                i.information,
+                i.time as prescription_time,
+                i.doctorID,
+                d.name as doctor_name,
+                GROUP_CONCAT(CONCAT(m.name, ' x', o.amount)) as medicine_list,
+                SUM(o.price) as total_price
+            FROM registration r
+            JOIN patients p ON r.patientsID = p.patientsID
+            LEFT JOIN information i ON r.registrationID = i.registrationID
+            LEFT JOIN doctor d ON i.doctorID = d.doctorID
+            LEFT JOIN order_for_medicine o ON r.registrationID = o.registrationID
+            LEFT JOIN medicine m ON o.medicineID = m.medicineID
+            WHERE r.state = %s
+            GROUP BY r.registrationID
+            ORDER BY i.time DESC
+        """
+        try:
+            results = self.execute_query(query, (state,))
+            return results if results else []
+        except Exception as e:
+            print(f"获取状态{state}的处方信息失败: {e}")
+            return []
