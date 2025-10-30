@@ -12,6 +12,9 @@ from repository.account import AccountRepository
 
 
 class AuthService:
+    # 类属性 - 所有实例共享
+    _active_tokens = {}
+
     def __init__(self):
         # 直接创建AccountRepository实例，它内部会处理数据库连接
         self.account_repo = AccountRepository()
@@ -34,7 +37,6 @@ class AuthService:
             # 验证密码
             if not self.verify_password(password, getattr(user, 'password_hash', None)):
                 return {"code": 401, "message": "密码错误"}
-
 
             token = self.generate_token(user_id, role)
 
@@ -290,12 +292,23 @@ class AuthService:
         except Exception as e:
             return {"code": 500, "message": f"获取账户信息失败: {str(e)}"}
 
-    # 以下方法保持不变...
+    # Token 相关方法 - 修改为使用类属性
     def verify_token(self, token):
-        """简单token验证"""
-        if not hasattr(self, 'active_tokens'):
+        """验证token - 带调试信息"""
+        print(f"=== Token验证调试 ===")
+        print(f"收到的token: {token}")
+        print(f"存储的token数量: {len(AuthService._active_tokens)}")
+
+        # 清理过期token
+        self.clean_expired_tokens()
+
+        token_info = AuthService._active_tokens.get(token)
+        if token_info:
+            print(f"找到用户: {token_info}")
+            return token_info
+        else:
+            print("token未找到")
             return None
-        return self.active_tokens.get(token)
 
     def get_profile_by_token(self, token):
         """获取用户信息"""
@@ -325,34 +338,30 @@ class AuthService:
         token_data = f"{user_id}:{role}:{timestamp}:{expires_in}:{secrets.token_hex(16)}"
         token = hashlib.sha256(token_data.encode()).hexdigest()
 
-        if not hasattr(self, 'active_tokens'):
-            self.active_tokens = {}
-
-        self.active_tokens[token] = {
+        # 使用类属性存储
+        AuthService._active_tokens[token] = {
             'user_id': user_id,
             'role': role,
             'created_at': timestamp,
             'expires_at': timestamp + expires_in
         }
 
-        # 定期清理过期token
-        self.clean_expired_tokens()
-
+        print(f"新token生成，当前总数: {len(AuthService._active_tokens)}")
         return token
 
     def clean_expired_tokens(self):
         """清理过期token"""
-        if not hasattr(self, 'active_tokens'):
-            return
-
         current_time = time.time()
         expired_tokens = [
-            token for token, info in self.active_tokens.items()
+            token for token, info in AuthService._active_tokens.items()
             if current_time > info['expires_at']
         ]
 
         for token in expired_tokens:
-            del self.active_tokens[token]
+            del AuthService._active_tokens[token]
+
+        if expired_tokens:
+            print(f"清理了 {len(expired_tokens)} 个过期token")
 
     def build_user_info(self, user, role):
         # 根据角色确定ID字段名
