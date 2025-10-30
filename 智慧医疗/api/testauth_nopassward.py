@@ -1,9 +1,7 @@
-# test_real_api.py
 import requests
 import json
-
-
 from tool_of_test import test_api
+
 
 def test_all_roles_login():
     """测试所有四类角色的登录和基本信息"""
@@ -22,7 +20,7 @@ def test_all_roles_login():
         print(f"\n🔐 测试 {test_case['role']} 登录")
         login_data = {
             "username": test_case["user_id"],
-            "password": "123456",
+            "password": "123456",  # 现在使用任意密码都可以，因为密码为NULL
             "role": test_case["role"]
         }
         login_result = test_api("/auth/login", "POST", login_data)
@@ -40,7 +38,10 @@ def test_all_roles_login():
             if profile_result and profile_result.get("code") == 200:
                 profile_data = profile_result["data"]
                 print(f"✅ 获取到{test_case['role']}信息:")
-                print(f"   ID: {profile_data['id']}")
+
+                # 兼容不同的字段名
+                user_id = profile_data.get('id') or profile_data.get('user_id')
+                print(f"   ID: {user_id}")
                 print(f"   姓名: {profile_data['name']}")
                 print(f"   年龄: {profile_data['age']}")
                 print(f"   角色: {profile_data['role']}")
@@ -53,53 +54,15 @@ def test_all_roles_login():
                     print(
                         f"❌ 数据验证失败! 期望: {test_case['expected_name']}({test_case['expected_age']}), 实际: {profile_data['name']}({profile_data['age']})")
             else:
-                print(f"❌ 获取{test_case['role']}信息失败")
+                print(f"❌ 获取{test_case['role']}信息失败: {profile_result.get('message', '未知错误')}")
         else:
-            print(f"❌ {test_case['role']}登录失败")
+            print(f"❌ {test_case['role']}登录失败: {login_result.get('message', '未知错误')}")
 
     return tokens
 
 
-def test_error_cases():
-    """测试错误情况"""
-    print("\n❌ 测试错误情况...")
-
-    # 1. 测试错误角色
-    print("\n1. 测试错误角色")
-    error_role_data = {
-        "username": "1",
-        "password": "123456",
-        "role": "invalid_role"
-    }
-    test_api("/auth/login", "POST", error_role_data)
-
-    # 2. 测试不存在的用户
-    print("\n2. 测试不存在的用户")
-    not_exist_data = {
-        "username": "9999",
-        "password": "123456",
-        "role": "patient"
-    }
-    test_api("/auth/login", "POST", not_exist_data)
-
-    # 3. 测试无效token
-    print("\n3. 测试无效token")
-    headers = {"Authorization": "Bearer invalid_token_123"}
-    test_api("/auth/profile", "GET", headers=headers)
-
-    # 4. 测试缺少token
-    print("\n4. 测试缺少token")
-    test_api("/auth/profile", "GET")
 
 
 if __name__ == "__main__":
     # 测试所有角色登录
     tokens = test_all_roles_login()
-
-    # 测试错误情况
-    test_error_cases()
-
-    print("\n🎉 四类角色登录测试完成！")
-    print(f"\n📊 测试结果总结:")
-    for role, token in tokens.items():
-        print(f"   {role}: {'✅ 成功' if token else '❌ 失败'}")

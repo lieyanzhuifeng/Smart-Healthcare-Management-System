@@ -1,4 +1,3 @@
-# services/AuthService.py
 import sys
 import os
 
@@ -6,40 +5,32 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import jwt
 import datetime
-from repository.patient import PatientRepository
-from repository.doctor import DoctorRepository
-from repository.pharmacyman import PharmacyManRepository
-from repository.admin import AdminRepository
+import hashlib
+import secrets
+from repository.account import AccountRepository
 
 
 class AuthService:
     def __init__(self):
-        self.patient_repo = PatientRepository()
-        self.doctor_repo = DoctorRepository()
-        self.pharmacyman_repo = PharmacyManRepository()
-        self.admin_repo = AdminRepository()
-        self.secret_key = "your-secret-key"
+        # 直接创建AccountRepository实例，它内部会处理数据库连接
+        self.account_repo = AccountRepository()
+        self.secret_key = "2353596wuruize2353579sunxiuming_dingzhenyao_mhy"
+
+        # 存储挑战码（生产环境建议用Redis）
+        self.challenges = {}
+        # 固定盐值用于密码哈希
+        self.password_salt = "medical_system_salt_2024"
 
     def login(self, username, password, role):
         try:
             user_id = int(username)
 
-            # 根据角色选择对应的repository
-            if role == 'patient':
-                user = self.patient_repo.get_patient_by_id(user_id)
-            elif role == 'doctor':
-                user = self.doctor_repo.get_doctor_by_id(user_id)
-            elif role == 'pharmacy':
-                user = self.pharmacyman_repo.get_pharmacyman_by_id(user_id)
-            elif role == 'admin':
-                user = self.admin_repo.get_admin_by_id(user_id)
-            else:
-                return {"code": 400, "message": "无效的角色"}
-
+            # 使用AccountRepository获取用户
+            user = self.account_repo.get_user_by_username(username, role)
             if not user:
                 return {"code": 401, "message": "用户不存在"}
 
-            # 处理密码为NULL的情况 - 任何密码都算对
+            # 验证密码
             if not self.verify_password(password, getattr(user, 'password_hash', None)):
                 return {"code": 401, "message": "密码错误"}
 
@@ -62,59 +53,263 @@ class AuthService:
         except Exception as e:
             return {"code": 500, "message": f"登录失败: {str(e)}"}
 
+    # 密码哈希相关方法
+    def hash_password(self, password: str) -> str:
+        """使用SHA-256哈希密码"""
+        password_with_salt = password + self.password_salt
+        return hashlib.sha256(password_with_salt.encode()).hexdigest()
+
+    def verify_password(self, input_password, stored_hash):
+        """验证密码"""
+        # 如果数据库密码为NULL，任何密码都算对（兼容旧数据）
+        if stored_hash is None or stored_hash == "NULL" or stored_hash == "":
+            return True
+
+        # 验证哈希密码
+        input_hash = self.hash_password(input_password)
+        return input_hash == stored_hash
+
+    # 挑战-响应机制
+    def generate_challenge(self, username: str, role: str) -> dict:
+        """生成挑战码"""
+        try:
+            challenge = secrets.token_hex(32)
+            expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+
+            # 存储挑战码
+            challenge_key = f"{role}:{username}"
+            self.challenges[challenge_key] = {
+                "challenge": challenge,
+                "expires_at": expires_at,
+                "attempts": 0  # 尝试次数
+            }
+
+            return {
+                "code": 200,
+                "message": "挑战码生成成功",
+                "data": {
+                    "challenge": challenge,
+                    "expires_in": 300  # 5分钟
+                }
+            }
+        except Exception as e:
+            return {"code": 500, "message": f"生成挑战码失败: {str(e)}"}
+
+    def login_with_challenge(self, username: str, role: str, challenge: str, response: str) -> dict:
+        """使用挑战-响应机制登录"""
+        try:
+            user_id = int(username)
+            challenge_key = f"{role}:{username}"
+
+            # 获取挑战数据
+            challenge_data = self.challenges.get(challenge_key)
+            if not challenge_data:
+                return {"code": 401, "message": "挑战码不存在或已过期"}
+
+            # 检查挑战码是否过期
+            if datetime.datetime.utcnow() > challenge_data["expires_at"]:
+                del self.challenges[challenge_key]
+                return {"code": 401, "message": "挑战码已过期"}
+
+            # 检查尝试次数
+            if challenge_data["attempts"] >= 3:
+                del self.challenges[challenge_key]
+                return {"code": 401, "message": "尝试次数过多"}
+
+            # 验证挑战码
+            if challenge_data["challenge"] != challenge:
+                challenge_data["attempts"] += 1
+                return {"code": 401, "message": "挑战码不匹配"}
+
+            # 获取用户
+            user = self.account_repo.get_user_by_username(username, role)
+            if not user:
+                return {"code": 401, "message": "用户不存在"}
+
+            # 验证响应（响应应该是挑战码+密码哈希的哈希）
+            expected_response = self._calculate_expected_response(
+                challenge,
+                getattr(user, 'password_hash', '')
+            )
+
+            if response != expected_response:
+                challenge_data["attempts"] += 1
+                return {"code": 401, "message": "响应验证失败"}
+
+            # 登录成功，清理挑战码
+            del self.challenges[challenge_key]
+
+            # 生成token
+            token = self.generate_token(user_id, role)
+            user_info = self.build_user_info(user, role)
+
+            return {
+                "code": 200,
+                "message": "登录成功",
+                "data": {
+                    "token": token,
+                    "user": user_info
+                }
+            }
+
+        except ValueError:
+            return {"code": 400, "message": "用户名格式错误"}
+        except Exception as e:
+            return {"code": 500, "message": f"挑战响应登录失败: {str(e)}"}
+
+    def _calculate_expected_response(self, challenge: str, password_hash: str) -> str:
+        """计算期望的响应值"""
+        # 响应 = SHA256(挑战码 + 密码哈希)
+        response_data = challenge + (password_hash or "")
+        return hashlib.sha256(response_data.encode()).hexdigest()
+
+    # 密码修改功能
+    def change_password(self, token: str, old_password: str, new_password: str) -> dict:
+        """修改密码"""
+        try:
+            # 验证token
+            payload = self.verify_token(token)
+            if not payload:
+                return {"code": 401, "message": "无效的token"}
+
+            user_id = payload['user_id']
+            role = payload['role']
+
+            # 获取用户
+            user = self.account_repo.get_user_by_username(str(user_id), role)
+            if not user:
+                return {"code": 401, "message": "用户不存在"}
+
+            # 验证旧密码
+            if not self.verify_password(old_password, getattr(user, 'password_hash', None)):
+                return {"code": 401, "message": "旧密码错误"}
+
+            # 更新密码
+            new_password_hash = self.hash_password(new_password)
+            update_result = self.account_repo.update_password(user_id, role, new_password_hash)
+
+            if update_result["success"]:
+                return {"code": 200, "message": "密码修改成功"}
+            else:
+                return {"code": 500, "message": update_result["message"]}
+
+        except Exception as e:
+            return {"code": 500, "message": f"密码修改失败: {str(e)}"}
+
+    # 账户管理功能
+    def create_account(self, user_data: dict, role: str) -> dict:
+        """创建账户"""
+        try:
+            # 如果有密码，先进行哈希
+            if 'password' in user_data:
+                user_data['password_hash'] = self.hash_password(user_data['password'])
+                del user_data['password']  # 移除明文密码
+
+            result = self.account_repo.create_account(user_data, role)
+
+            if result["success"]:
+                return {
+                    "code": 200,
+                    "message": result["message"],
+                    "data": {
+                        "user_id": result["user_id"],
+                        "role": result["role"]
+                    }
+                }
+            else:
+                return {"code": 500, "message": result["message"]}
+
+        except Exception as e:
+            return {"code": 500, "message": f"创建账户失败: {str(e)}"}
+
+    def update_account_info(self, token: str, update_data: dict) -> dict:
+        """更新账户信息"""
+        try:
+            # 验证token
+            payload = self.verify_token(token)
+            if not payload:
+                return {"code": 401, "message": "无效的token"}
+
+            user_id = payload['user_id']
+            role = payload['role']
+
+            result = self.account_repo.update_account_info(user_id, role, update_data)
+
+            if result["success"]:
+                return {"code": 200, "message": result["message"]}
+            else:
+                return {"code": 500, "message": result["message"]}
+
+        except Exception as e:
+            return {"code": 500, "message": f"更新账户信息失败: {str(e)}"}
+
+    def delete_account(self, token: str) -> dict:
+        """删除账户"""
+        try:
+            # 验证token
+            payload = self.verify_token(token)
+            if not payload:
+                return {"code": 401, "message": "无效的token"}
+
+            user_id = payload['user_id']
+            role = payload['role']
+
+            result = self.account_repo.delete_account(user_id, role)
+
+            if result["success"]:
+                return {"code": 200, "message": result["message"]}
+            else:
+                return {"code": 500, "message": result["message"]}
+
+        except Exception as e:
+            return {"code": 500, "message": f"删除账户失败: {str(e)}"}
+
+    def get_account_info(self, token: str) -> dict:
+        """获取账户信息"""
+        try:
+            # 验证token
+            payload = self.verify_token(token)
+            if not payload:
+                return {"code": 401, "message": "无效的token"}
+
+            user_id = payload['user_id']
+            role = payload['role']
+
+            result = self.account_repo.get_account_info(user_id, role)
+
+            if result["success"]:
+                return {
+                    "code": 200,
+                    "message": result["message"],
+                    "data": result["data"]
+                }
+            else:
+                return {"code": 500, "message": result["message"]}
+
+        except Exception as e:
+            return {"code": 500, "message": f"获取账户信息失败: {str(e)}"}
+
+    # 以下方法保持不变...
     def get_profile_by_token(self, token):
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=['HS256'])
             user_id = payload['user_id']
             role = payload['role']
 
-            if role == 'patient':
-                user = self.patient_repo.get_patient_by_id(user_id)
-                profile_data = {
-                    "id": user.patientsID,
-                    "name": user.name,
-                    "role": role,
-                    "age": user.age,
+            # 使用account_repo获取用户信息
+            result = self.account_repo.get_account_info(user_id, role)
+            if result["success"]:
+                # 构建完整的profile数据
+                profile_data = result["data"]
+                # 添加一些默认字段
+                profile_data.update({
                     "avatar": None,
                     "phone": None
-                }
-            elif role == 'doctor':
-                user = self.doctor_repo.get_doctor_by_id(user_id)
-                profile_data = {
-                    "id": user.doctorID,
-                    "name": user.name,
-                    "role": role,
-                    "age": user.age,
-                    "avatar": None,
-                    "phone": None,
-                    "expertiseID": user.expertiseID,
-                    "officeID": user.officeID,
-                    "positionID": user.positionID
-                }
-            elif role == 'pharmacy':
-                user = self.pharmacyman_repo.get_pharmacyman_by_id(user_id)
-                profile_data = {
-                    "id": user.pharmacymanID,
-                    "name": user.name,
-                    "role": role,
-                    "age": user.age,
-                    "avatar": None,
-                    "phone": None
-                }
-            elif role == 'admin':
-                user = self.admin_repo.get_admin_by_id(user_id)
-                profile_data = {
-                    "id": user.adminID,
-                    "name": user.name,
-                    "role": role,
-                    "age": user.age,
-                    "avatar": None,
-                    "phone": None
-                }
+                })
+                return {"code": 200, "data": profile_data}
             else:
-                return {"code": 400, "message": "无效的角色"}
+                return {"code": 404, "message": result["message"]}
 
-            return {"code": 200, "data": profile_data}
         except jwt.ExpiredSignatureError:
             return {"code": 401, "message": "token已过期"}
         except jwt.InvalidTokenError:
@@ -129,14 +324,6 @@ class AuthService:
             return payload
         except:
             return None
-
-    def verify_password(self, input_password, stored_hash):
-        """验证密码 - 如果数据库密码为NULL，任何密码都算对"""
-        if stored_hash is None or stored_hash == "NULL" or stored_hash == "":
-            # 数据库密码为NULL，允许任何密码登录
-            return True
-        # 如果有真实密码，进行验证
-        return input_password == stored_hash
 
     def generate_token(self, user_id, role):
         payload = {

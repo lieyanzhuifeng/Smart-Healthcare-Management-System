@@ -1,8 +1,10 @@
 # model.py - 医院管理系统数据模型
 from typing import List, ClassVar, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass,field
 from datetime import datetime
 from typing import Optional
+
+
 
 
 @dataclass
@@ -20,6 +22,8 @@ class Patients:
             age=data.get('age'),
             password_hash=data.get('password_hash', '')  # 默认为空字符串
         )
+
+
 
 
 @dataclass
