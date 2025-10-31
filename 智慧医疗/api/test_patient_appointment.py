@@ -55,13 +55,13 @@ def test_simple_registration_flow():
         print(f"  - {doctor['doctor_name']} (ID: {doctor['doctorID']}) - {doctor['position_name']}")
 
     # 5. 选择第一个医生
-    doctor_id = 1
-    print(f"\n5. 选择医生: 医生1 (ID: {doctor_id})")
+    doctor_id = 16
+    print(f"\n5. 选择医生: 医生16 (ID: {doctor_id})")
 
     # 6. 获取医生排班（使用固定日期）
-    print(f"\n6. 获取医生排班 - 日期: 2025-10-29")
+    print(f"\n6. 获取医生排班 - 日期: 2025-11-1")
 
-    schedule_result = test_api(f"/patient/schedule/doctor?doctorId={doctor_id}&date=2025-10-29", "GET", headers=headers)
+    schedule_result = test_api(f"/patient/schedule/doctor?doctorId={doctor_id}&date=2025-11-1", "GET", headers=headers)
 
     if not schedule_result or schedule_result.get("code") != 200:
         print("❌ 获取排班失败")
@@ -90,7 +90,7 @@ def test_simple_registration_flow():
 
     if appointment_result and appointment_result.get("code") == 200:
         print("✅ 预约创建成功")
-        
+
 
     # 8. 查看最终结果
     print("\n8.1 查看预约列表")

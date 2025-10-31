@@ -17,9 +17,9 @@ def test_generate_and_save():
 
     # 直接调用函数
     success = schedule_service.generate_and_save_schedules(
-        start_date="2025-10-30",
-        end_date="2025-10-30",
-        timeslots=[3]
+        start_date="2025-11-1",
+        end_date="2025-11-1",
+        timeslots=[1]
     )
 
     print(f"结果: {'✅ 成功' if success else '❌ 失败'}")

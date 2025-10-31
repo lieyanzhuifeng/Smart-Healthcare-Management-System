@@ -28,7 +28,7 @@ def test_register_patient_direct():
     print("\n2. 测试直接挂号（无预约患者）")
     registration_data = {
         "officeId": 1,  # 外科
-        "datetime": "2025-10-29 23:10:00"  # 未来时间
+        "datetime": "2025-11-1 1:10:00"  # 未来时间
     }
 
     result = test_api("/patient/registration/register", "POST", registration_data, headers)

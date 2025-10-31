@@ -25,9 +25,9 @@ def test_api_section_224():
     print("✅ 登录成功")
 
     # 2. 直接测试section_id=224的预约转挂号
-    print("\n2. 测试section_id=233的预约转挂号")
+    print("\n2. 测试section_id=252的预约转挂号")
     registration_data = {
-        "sectionId": 233
+        "sectionId": 252
     }
 
     result = test_api("/patient/registration/register", "POST", registration_data, headers)
