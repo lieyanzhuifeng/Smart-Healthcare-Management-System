@@ -7,11 +7,14 @@ from repository.section import SectionRepository
 from model import Appointment  # 导入Appointment类来使用状态常量
 
 class AppointmentRepository(Base):
+    def __init__(self):
+        super().__init__()
+        self.section_repo = SectionRepository()  # 在这里初始化
+
     def create_appointment(self, patients_id: int, section_id: int) -> bool:
         """创建预约 - 对应需求5"""
         # 首先检查是否还有预约名额
-        section_repo = SectionRepository()
-        quota_info = section_repo.get_appointment_quota(section_id)
+        quota_info = self.section_repo.get_appointment_quota(section_id)
 
         if quota_info["restappiontment"] <= 0:
             print(f"排班 {section_id} 没有剩余预约名额")
@@ -39,6 +42,10 @@ class AppointmentRepository(Base):
                 if result2 <= 0:
                     raise Exception("减少预约名额失败")
 
+                # 增加预约转挂号预留人数
+                if not self.section_repo.increase_appointment_convert(section_id):
+                    raise Exception("增加预约转挂号预留人数失败")
+
                 print(f"成功创建预约: 患者 {patients_id}, 排班 {section_id}")
                 return True
 
@@ -54,9 +61,9 @@ class AppointmentRepository(Base):
             print(f"预约ID {appointment_id} 不存在")
             return False
 
-        # 检查预约状态
-        if appointment['state'] == 3:  # 3对应已取消状态
-            print(f"预约 {appointment_id} 已被取消")
+        # 检查预约状态：只有状态为1（有效且未转挂号）才能取消
+        if appointment['state'] != 1:
+            print(f"预约 {appointment_id} 状态为{appointment['state']}，不能取消（只有状态为1的有效预约才能取消）")
             return False
 
         patients_id = appointment['patientsID']
@@ -75,6 +82,13 @@ class AppointmentRepository(Base):
                 # 恢复预约名额
                 quota_query = "UPDATE section SET restappiontment = restappiontment + 1 WHERE sectionID = %s"
                 result2 = self.execute_update(quota_query, (section_id,))
+
+                if result2 <= 0:
+                    raise Exception("恢复预约名额失败")
+
+                # 减少预约转挂号预留人数
+                if not self.section_repo.decrease_appointment_convert(section_id):
+                    raise Exception("减少预约转挂号预留人数失败")
 
                 print(f"成功取消预约: 预约ID {appointment_id}, 患者 {patients_id}, 排班 {section_id}")
                 return True

@@ -139,9 +139,16 @@ class RegistrationRepository(Base):
     # 获取某个排班的挂号数量
     def get_registration_count_by_section(self, section_id: int) -> int:
         try:
-            query = "SELECT COUNT(*) as count FROM registration WHERE sectionID = %s AND state != %s"
-            result = self.execute_query(query, (section_id, Registration.STATE_CANCELLED))
-            return result[0]['count'] if result else 0
+            query = "SELECT totalregistration, restregistration FROM section WHERE sectionID = %s"
+            result = self.execute_query(query, (section_id,))
+
+            if result:
+                total_registration = result[0]['totalregistration']
+                rest_registration = result[0]['restregistration']
+                # 挂号数量 = 总挂号名额 - 剩余挂号名额
+                return total_registration - rest_registration
+            else:
+                return 0
         except Exception as e:
             print(f"获取排班挂号数量失败: {e}")
             return 0
@@ -153,6 +160,7 @@ class RegistrationRepository(Base):
                 SELECT 
                     r.registrationID,
                     r.patientsID,
+                    r.patientsID as patient_id,  -- 增加这个别名
                     r.sectionID,
                     r.number,
                     r.state,

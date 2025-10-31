@@ -57,8 +57,8 @@ class RegistrationService:
             if not section_id:
                 return False, None
             # 生成挂号号码
-            current_registrations = self.registration_repo.get_registrations_by_section(section_id)
-            number = len(current_registrations) + 1
+            current_registrations = self.registration_repo.get_registration_count_by_section(section_id)
+            number = current_registrations + 1
             # 创建挂号记录
             success = self.registration_repo.create_registration(patients_id, section_id, number)
             if success:
@@ -95,13 +95,15 @@ class RegistrationService:
                 print(f"患者 {patients_id} 没有排班 {section_id} 的有效预约")
                 return False
             # 生成挂号号码
-            current_registrations = self.registration_repo.get_registrations_by_section(section_id)
-            number = len(current_registrations) + 1
+            current_registrations = self.registration_repo.get_registration_count_by_section(section_id)
+            number = current_registrations + 1
             # 创建挂号记录
             success = self.registration_repo.create_registration(patients_id, section_id, number)
             if success:
                 # 更新剩余挂号名额
                 self.section_repo.decrease_registration_quota(section_id)
+                #减少预约转挂号预留名额
+                self.section_repo.decrease_appointment_convert(section_id)
                 # 标记预约为已完成
                 self._complete_appointment(patients_id, section_id)
                 return True

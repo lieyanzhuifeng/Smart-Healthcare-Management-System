@@ -17,8 +17,8 @@ def test_generate_and_save():
 
     # 直接调用函数
     success = schedule_service.generate_and_save_schedules(
-        start_date="2025-10-27",
-        end_date="2025-10-27",
+        start_date="2025-10-30",
+        end_date="2025-10-30",
         timeslots=[3]
     )
 

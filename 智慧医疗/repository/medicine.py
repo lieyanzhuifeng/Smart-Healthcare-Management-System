@@ -462,6 +462,7 @@ class MedicalOrderRepository(Base):
             LEFT JOIN order_for_medicine o ON r.registrationID = o.registrationID
             LEFT JOIN medicine m ON o.medicineID = m.medicineID
             WHERE r.state = %s
+            AND i.have_medicine = 1  -- 只包含需要开药的记录
             GROUP BY r.registrationID
             ORDER BY i.time DESC
         """

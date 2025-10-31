@@ -10,12 +10,14 @@ from flask import Blueprint, request, jsonify, Response
 from services.AppointmentService import AppointmentService
 from services.RegistrationService import RegistrationService
 from services.AuthService import AuthService
+from services.MedicalRecordService import MedicalRecordService
 from repository.office import OfficeRepository
 from repository.patient import PatientRepository
 
 bp = Blueprint('patient', __name__)
 appointment_service = AppointmentService()
 registration_service = RegistrationService()
+medical_record_service = MedicalRecordService()
 auth_service = AuthService()
 office_repo = OfficeRepository()
 patient_repo = PatientRepository()
@@ -450,6 +452,181 @@ def get_reminders():
     except Exception as e:
         return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
 
+
+@bp.route('/medical-records', methods=['GET'])
+def get_medical_records():
+    """获取患者完整病历记录"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        records = medical_record_service.get_patient_medical_records(patient_id)
+
+        if records:
+            # 格式化病历记录数据
+            formatted_records = []
+            for record in records:
+                formatted_record = {
+                    "registrationId": record.get('registrationID'),
+                    "time": record.get('time'),
+                    "information": record.get('information'),
+                    "haveMedicine": record.get('have_medicine', False),
+                    "doctor": {
+                        "doctorId": record['doctor'].doctorID if record.get('doctor') else None,
+                        "doctorName": record['doctor'].doctor_name if record.get('doctor') else None,
+                        "officeName": record['doctor'].office_name if record.get('doctor') else None,
+                        "expertiseName": record['doctor'].expertise_name if record.get('doctor') else None,
+                        "positionName": record['doctor'].position_name if record.get('doctor') else None
+                    } if record.get('doctor') else None
+                }
+
+                # 添加处方信息
+                if record.get('have_medicine') and record.get('prescription'):
+                    formatted_record["prescription"] = []
+                    for item in record['prescription']:
+                        medicine = item.get('medicine')
+                        order = item.get('order')
+                        if medicine and order:
+                            formatted_record["prescription"].append({
+                                "medicineId": medicine.medicineID,
+                                "medicineName": medicine.name,
+                                "price": medicine.price,
+                                "amount": order.amount,
+                                "totalPrice": order.price,
+                                "description": medicine.description
+                            })
+
+                formatted_records.append(formatted_record)
+
+            return jsonify({
+                "code": 200,
+                "message": "获取病历记录成功",
+                "data": formatted_records
+            })
+        else:
+            return jsonify({
+                "code": 200,
+                "message": "暂无病历记录",
+                "data": []
+            })
+
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+
+@bp.route('/medical-records/<int:registration_id>/prescription', methods=['GET'])
+def get_prescription_details(registration_id):
+    """获取特定病历的处方详情"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        prescription = medical_record_service.get_prescription_details(registration_id)
+
+        if prescription:
+            formatted_prescription = []
+            total_price = 0
+
+            for item in prescription:
+                medicine = item.get('medicine')
+                order = item.get('order')
+                if medicine and order:
+                    total_price += order.price
+                    formatted_prescription.append({
+                        "medicineId": medicine.medicineID,
+                        "medicineName": medicine.name,
+                        "unitPrice": medicine.price,
+                        "amount": order.amount,
+                        "totalPrice": order.price,
+                        "description": medicine.description
+                    })
+
+            return jsonify({
+                "code": 200,
+                "message": "获取处方详情成功",
+                "data": {
+                    "registrationId": registration_id,
+                    "medicines": formatted_prescription,
+                    "totalPrice": total_price,
+                    "medicineCount": len(formatted_prescription)
+                }
+            })
+        else:
+            return jsonify({
+                "code": 200,
+                "message": "该病历无处方信息",
+                "data": {
+                    "registrationId": registration_id,
+                    "medicines": [],
+                    "totalPrice": 0,
+                    "medicineCount": 0
+                }
+            })
+
+    except Exception as e:
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
+
+
+@bp.route('/health-overview', methods=['GET'])
+def get_health_overview():
+    """获取患者健康概览（综合信息，用于首页展示）"""
+    patient_id = get_current_patient_id()
+    if not patient_id:
+        return jsonify({"code": 401, "message": "未认证"})
+
+    try:
+        # 获取病历摘要
+        medical_summary = medical_record_service.get_medical_record_summary(patient_id)
+
+        # 获取预约信息
+        appointment_result = appointment_service.get_patient_appointments(patient_id)
+
+        appointments = []
+        if appointment_result and appointment_result.get('success'):
+            appointments = appointment_result.get('appointments', [])
+        else:
+            print(f"🔍 健康概览调试: 预约服务返回异常: {appointment_result}")
+
+        # 获取挂号历史
+        registrations = []
+        try:
+            registrations = registration_service.get_patient_registrations(patient_id)
+        except Exception as e:
+            registrations = []
+
+        # 构建健康概览 - 确保所有字段都有默认值
+        total_records = medical_summary.get('total_records', 0) if medical_summary else 0
+        records_with_medicine = medical_summary.get('records_with_medicine', 0) if medical_summary else 0
+
+        overview = {
+            "patientId": patient_id,
+            "statistics": {
+                "medicalRecords": total_records,
+                "upcomingAppointments": len([a for a in appointments if a and a.get('state') == 1]),
+                "totalRegistrations": len(registrations) if registrations else 0,
+                "prescriptionRate": round((records_with_medicine / total_records * 100), 1) if total_records > 0 else 0
+            },
+            "recentInfo": {
+                "lastDoctor": medical_summary.get('recent_doctor') if medical_summary else None,
+                "lastVisit": medical_summary.get('recent_record_time') if medical_summary else None
+            },
+            "lastUpdate": datetime.now().isoformat()
+        }
+
+        return jsonify({
+            "code": 200,
+            "message": "获取健康概览成功",
+            "data": overview
+        })
+
+    except Exception as e:
+        print(f"🔍 健康概览调试: 发生异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"code": 500, "message": f"系统错误: {str(e)}"})
 
 @bp.route('/test/connection', methods=['GET'])
 def test_connection():

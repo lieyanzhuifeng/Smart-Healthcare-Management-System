@@ -131,7 +131,7 @@ class SectionRepository(Base):
     def get_current_timeslot_availability(self, office_id: int, date: str, timeslot_id: int) -> Dict:
         try:
             query = """
-                    SELECT s.sectionID, s.restregistration, s.roomID, d.name as doctor_name
+                    SELECT s.sectionID, s.restregistration, s.appiontmentconvert, s.roomID, d.name as doctor_name
                     FROM section s
                              JOIN doctor d ON s.doctorID = d.doctorID
                              JOIN room r ON s.roomID = r.roomID
@@ -142,10 +142,14 @@ class SectionRepository(Base):
             results = self.execute_query(query, (office_id, date, timeslot_id))
 
             if results:
-                total_restregistration = sum(result['restregistration'] for result in results)
+                # 计算实际可用挂号名额：剩余挂号名额 - 预约转挂号预留人数
+                total_available_registration = sum(
+                    max(0, result['restregistration'] - result['appiontmentconvert'])
+                    for result in results
+                )
                 return {
                     "sectionID": results[0]['sectionID'],
-                    "restregistration": total_restregistration,
+                    "restregistration": total_available_registration,
                     "roomID": results[0]['roomID'],
                     "doctor_count": len(results)
                 }
@@ -246,7 +250,7 @@ class SectionRepository(Base):
             print(f"查询预约转挂号人数失败: {e}")
             return 0
 
-    # 预约转挂号人数 +1 (预约患者转挂号时调用)
+    # 预约转挂号预留人数 +1 (患者预约时调用)
     def increase_appointment_convert(self, section_id: int) -> bool:
         try:
             query = "UPDATE section SET appiontmentconvert = appiontmentconvert + 1 WHERE sectionID = %s"
@@ -256,7 +260,7 @@ class SectionRepository(Base):
             print(f"增加预约转挂号人数失败: {e}")
             return False
 
-    # 预约转挂号人数 -1 (特殊情况取消转挂号时调用)
+    # 预约转挂号预留人数 -1 (患者预约转挂号时调用)
     def decrease_appointment_convert(self, section_id: int) -> bool:
         try:
             query = "UPDATE section SET appiontmentconvert = appiontmentconvert - 1 WHERE sectionID = %s AND appiontmentconvert > 0"

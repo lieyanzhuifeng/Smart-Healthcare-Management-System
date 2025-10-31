@@ -42,7 +42,7 @@ def test_get_daily_schedule(service):
     if registrations:
         print(f"\n医生 {doctor_id} 在 {date} 的有效挂号信息:")
         for reg in registrations:
-            print(f"  挂号ID: {reg['registrationID']}, 患者: {reg['patient_name']}({reg['patient_age']}岁), "
+            print(f"  挂号ID: {reg['registrationID']},患者ID：{reg['patient_id']}, 患者: {reg['patient_name']}({reg['patient_age']}岁), "
                   f"状态: {reg['state']}, "
                   f"时间: {reg['date']} {reg['starttime']}-{reg['endtime']},"
                   f"序号：{reg['number']}")
@@ -136,7 +136,7 @@ def test_complete_visit_workflow(service):
 
     print(f"\n医生 {doctor_id} 在 {date} 的挂号列表:")
     for i, reg in enumerate(registrations, 1):
-        print(f"  {i}. 挂号ID: {reg['registrationID']}, 患者: {reg['patient_name']}({reg['patient_age']}岁), "
+        print(f"  {i}. 挂号ID: {reg['registrationID']}, 患者ID：{reg['patient_id']},患者: {reg['patient_name']}({reg['patient_age']}岁), "
               f"状态: {reg['state']},时间: {reg['date']} {reg['starttime']}-{reg['endtime']}, 序号: {reg['number']}")
 
     # 2. 选择挂号开始问诊

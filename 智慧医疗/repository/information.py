@@ -149,6 +149,13 @@ class InformationRepository(Base):
             if result > 0:
                 print(f"就诊记录插入成功，挂号ID: {registration_id}")
 
+                # 更新医生接诊人数
+                update_doctor_query = "UPDATE doctor SET NumberOfPatients = NumberOfPatients + 1 WHERE doctorID = %s"
+                doctor_update_result = self.execute_update(update_doctor_query, (doctor_id,))
+
+                if doctor_update_result <= 0:
+                    print(f"警告：更新医生 {doctor_id} 接诊人数失败")
+
                 # 如果不开药，直接将挂号状态改为4（已取药）
                 if not have_medicine:
                     update_success = self.registration_repo.update_registration_state(registration_id,
