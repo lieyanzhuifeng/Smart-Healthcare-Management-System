@@ -370,10 +370,16 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { patientAPI } from '@/api'
+// import {
+//   House, Calendar, Document, DocumentCopy, Tickets,
+//   DataAnalysis, VideoCamera, Bell, ArrowDown, Search,
+//   User, Stethoscope, FirstAidKit, Operation, View
+// } from '@element-plus/icons-vue'
+
 import {
   House, Calendar, Document, DocumentCopy, Tickets,
   DataAnalysis, VideoCamera, Bell, ArrowDown, Search,
-  User, Stethoscope, FirstAidKit, Operation, View
+  User, FirstAidKit, Operation, View
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -635,6 +641,18 @@ const cancelAppointment = async (id) => {
 
 const handleMenuSelect = (index) => {
   activeMenu.value = index
+  const routeMap = {
+    'overview': '/patient',
+    'appointment': '/patient/appointment', 
+    'records': '/patient/records'
+  }
+  
+  if (routeMap[index]) {
+    router.push(routeMap[index])
+  } else {
+    // 对于尚未实现的页面，显示提示信息
+    ElMessage.info(`功能开发中: ${index}`)
+  }
 }
 
 const handleCommand = (command) => {
