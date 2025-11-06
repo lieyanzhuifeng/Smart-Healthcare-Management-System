@@ -103,6 +103,9 @@ export const adminAPI = {
   // 其他
   getDepartments: () => request.get("/admin/departments"),
   getNotifications: () => request.get("/admin/notifications"),
+  //补充
+  getDoctors: () => request.get("/admin/doctors"),
+  healthCheck: () => request.get("/admin/health"),
 }
 
 export default request
