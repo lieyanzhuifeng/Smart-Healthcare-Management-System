@@ -75,11 +75,8 @@
         </el-form-item>
       </el-form>
 
-      <div class="login-footer">
-        <el-text type="info" size="small">
-          演示账号：patient/doctor/pharmacy/admin，密码：123456
-        </el-text>
-      </div>
+      
+      
     </div>
   </div>
 </template>

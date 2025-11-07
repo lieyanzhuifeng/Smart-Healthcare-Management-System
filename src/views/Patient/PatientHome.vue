@@ -114,11 +114,12 @@
             <div v-if="appointments.length === 0" style="text-align: center; padding: 20px; color: #999;">
               暂无预约信息
             </div>
-            <el-table v-else :data="appointments.slice(0, 5)" style="width: 100%">
+            <el-table v-else :data="appointments.slice().reverse()" style="width: 100%">
               <el-table-column prop="office_name" label="科室" width="120" />
               <el-table-column prop="doctor_name" label="医生" width="100" />
               <el-table-column prop="date" label="就诊日期" width="120" />
               <el-table-column prop="starttime" label="就诊时间" width="100" />
+              <el-table-column prop="endtime" label="结束时间" width="100" />
               <el-table-column label="状态" width="100">
                 <template #default="{ row }">
                   <el-tag :type="row.state === 1 ? 'success' : 'info'">

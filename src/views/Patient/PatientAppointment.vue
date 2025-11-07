@@ -118,7 +118,7 @@
                           <FirstAidKit />
                         </el-icon>
                         <div style="margin-top: 12px; font-weight: bold;">{{ dept.name }}</div>
-                        <el-text type="info" size="small">{{ dept.doctorCount || 0 }} 位医生</el-text>
+                        <!-- <el-text type="info" size="small">{{ dept.doctorCount || 0 }} 位医生</el-text> -->
                       </div>
                     </el-card>
                   </el-col>
