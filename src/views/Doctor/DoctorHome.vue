@@ -18,6 +18,11 @@
           <el-icon><Tickets /></el-icon>
           <span>处方管理</span>
         </el-menu-item>
+        <el-menu-item index="chat">
+          <el-icon><ChatLineRound /></el-icon>
+          <span>在线咨询</span>
+        </el-menu-item>
+
       </el-menu>
     </div>
 
@@ -162,6 +167,9 @@ const getStatusType = (status) => {
 
 const handleMenuSelect = (index) => {
   activeMenu.value = index
+  if (index === 'chat') {
+    router.push('/doctor/chat')
+  }
 }
 
 const handleCommand = (command) => {

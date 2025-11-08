@@ -22,6 +22,10 @@
           <el-icon><Bell /></el-icon>
           <span>健康提醒</span>
         </el-menu-item>
+        <el-menu-item index="chat">
+          <el-icon><Message /></el-icon>
+          <span>在线咨询</span>
+        </el-menu-item>
       </el-menu>
     </div>
 
@@ -221,6 +225,8 @@ const handleMenuSelect = (index) => {
     router.push('/patient/appointment')
   } else if (index === 'records') {
     router.push('/patient/records')
+  } else if (index === 'chat') {
+    router.push('/patient/chat')
   }
 }
 
