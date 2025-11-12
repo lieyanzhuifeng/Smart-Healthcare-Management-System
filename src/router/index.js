@@ -37,6 +37,12 @@ const routes = [
     meta: { title: "就诊记录", requiresAuth: true, role: "patient" },
   },
   {
+    path: "/chat",
+    name: "Chat",
+    component: () => import("@/views/Chat.vue"),
+    meta: { title: "在线咨询", requiresAuth: true, role: "patient" },
+  },
+  {
     path: "/doctor",
     name: "Doctor",
     component: () => import("@/views/Doctor/DoctorHome.vue"),

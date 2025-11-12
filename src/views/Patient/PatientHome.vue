@@ -226,7 +226,7 @@ const handleMenuSelect = (index) => {
   } else if (index === 'records') {
     router.push('/patient/records')
   } else if (index === 'chat') {
-    router.push('/patient/chat')
+    router.push('/chat')
   }
 }
 
